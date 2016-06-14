@@ -17,7 +17,7 @@ The whole evaluation process contained 6 parts:
 ## Results
 ### 1. computing time
 |id|core.sec| avg.mem| max.mem| max.swap| cores| max.threads|
-|--|--|--|--|--|--|--|
+|---|---|---|---|---|---|---|
 |408_A009| 9804.93| 6078| 4650.65| 20403| 4| 37|
 |409_A011| 10263.33| 6110| 4753.31| 20403| 4| 37|
 |410_A012| 10077.11| 6084| 4780.85| 20403| 4| 37|
