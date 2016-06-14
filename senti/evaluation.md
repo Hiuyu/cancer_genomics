@@ -28,6 +28,7 @@ The whole evaluation process contained 6 parts:
 |415_A018| 12316.06| 6131| 4794.75| 20403| 4| 37|
 |416_A019| 11772.94| 6138| 4799.26| 20403| 4| 37|
 |417_A020| 11186.60| 6157| 4756.87| 20403| 4| 37|
+![enter image description here](time.jpg)
 
 ### 2. memory cost
 
