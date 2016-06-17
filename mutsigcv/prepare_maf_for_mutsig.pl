@@ -33,7 +33,7 @@ while(<FILE>){
 		### if found 'unknown' effect, warning and skip
 		if($effect eq "null"){
 			#print STDERR "\"unknown\" effect found in <\"",join "\t", @arr,"\">, this annotation will be skipped.\n";
-print STDERR $_,"\n";
+#print STDERR $_,"\n";
 			undef @sub_arr;
 			next;
 		}
@@ -73,10 +73,10 @@ sub define_effect{
 	}else{
 		$func_exonic=~s/\s+/_/g;
 		$func=($func_exonic eq '.' && $func_gene ne 'exonic') ? $func_gene : $func_exonic;
-		$effect="noncoding" if grep{$_ eq $func} @noncoding_arr;
-		$effect="silent" if grep{$_ eq $func} @silent_arr;
-		$effect="nonsilent" if grep{$_ eq $func} @nonsilent_arr;
-		$effect="null" if grep{$_ eq $func} @null_arr;
+		$effect="noncoding" if grep{$_ =~/$func/} @noncoding_arr;
+		$effect="silent" if grep{$_ =~/$func/} @silent_arr;
+		$effect="nonsilent" if grep{$_ =~ /$func/} @nonsilent_arr;
+		$effect="null" if grep{$_ =~ /$func/} @null_arr;
 	}
 	return $effect;	
 }
@@ -86,7 +86,7 @@ sub check_and_split_annot{
 	my $annot=shift;
 	my $index=shift;
 	my @split_annot;
-	my $is_split=0;
+	my $is_split=1;
 	my @arr_annot=split /\t/, $annot;
 	my $gene=$arr_annot[$index->[0]];
 	my $gene_func=$arr_annot[$index->[1]];
@@ -100,7 +100,20 @@ sub check_and_split_annot{
 		if($num_gene==1 && $num_exonic_func==1){
 			$is_split=0;
 		}else{
-			if($gene_func eq "intergenic"){ ######################## not finish ###########################
+			if($gene_func eq "intergenic"){ 
+				$gene=deal_with_intergenic($gene, $arr_annot[$header{'GeneDetail_refGene'}]);
+			}else{
+				#warn "$gene\n";
+				$gene=deal_with_multigene($gene);
+				#die "$gene\n";
+			}
+#warn "$_\n";
+#warn "-----------------------$gene--------------------------\n";
+		}
+	}else{
+warn "$_\n";
+warn "-----------------------$gene--------------------------\n";
+	}		
 				
 	### if func_gene==intergenic, do nothing
 	if($arr_annot[$index->[1]] eq "intergenic"){
@@ -132,5 +145,39 @@ sub check_and_split_annot{
 	return @split_annot;
 }
 	
+### pick the nearest gene, if Func_refGene == "intergenic"
+sub deal_with_intergenic{
+	my ($ref_gene, $dist_str)=@_;
+	my $gene;	
+	my $min_pos;
+	if($dist_str=~/dist=(\d+);dist=(\d+)/){
+		if($1 eq "NONE" && $2 eq "NONE"){
+			warn "WARNING: $ref_gene, $dist_str has no dist value\n";
+			return ".";
+		}elsif($1 eq "NONE"){
+			$min_pos=1;
+		}elsif($2 eq "NONE"){
+			$min_pos=0;
+		}else{
+			$min_pos=$1 < $2 ? 0 : 1;
+		}
+	}
+	my @tmp=split /,/, $ref_gene;
+	$gene=$tmp[$min_pos];
+	return $gene;
+}
 
-
+### get the first non "LOC" gene
+sub deal_with_multigene{
+	my @genes=split /,/, shift;
+	my $gene="";
+	foreach my $g (@genes){
+		$gene=$g;
+		if($gene=~/^LOC/){
+			next;
+		}else{
+			last;
+		}
+	}
+	return $gene;
+}
