@@ -86,7 +86,6 @@ sub check_and_split_annot{
 	my $annot=shift;
 	my $index=shift;
 	my @split_annot;
-	my $is_split=1;
 	my @arr_annot=split /\t/, $annot;
 	my $gene=$arr_annot[$index->[0]];
 	my $gene_func=$arr_annot[$index->[1]];
@@ -98,7 +97,7 @@ sub check_and_split_annot{
 	my @nums=($num_gene,$num_gene_func,$num_exonic_func);
 	if($num_gene_func==1){
 		if($num_gene==1 && $num_exonic_func==1){
-			$is_split=0;
+			# do nothing
 		}else{
 			if($gene_func eq "intergenic"){ 
 				$gene=deal_with_intergenic($gene, $arr_annot[$header{'GeneDetail_refGene'}]);
@@ -111,37 +110,14 @@ sub check_and_split_annot{
 #warn "-----------------------$gene--------------------------\n";
 		}
 	}else{
+		($gene,$gene_func,$exonic_func)=deal_with_multifunc($gene,$gene_func,$exonic_func);
 warn "$_\n";
-warn "-----------------------$gene--------------------------\n";
-	}		
-				
-	### if func_gene==intergenic, do nothing
-	if($arr_annot[$index->[1]] eq "intergenic"){
-		$is_split=0;
-	}
-	if ($is_split){
-		my $num_gene=split /,/,$arr_annot[$index->[0]];
-		my $num_gene_func=split /,/,$arr_annot[$index->[1]];
-		my $num_exonic_func=split /,/,$arr_annot[$index->[2]];
-		
-		my $i=0;
-		while($i<$num_gene){
-			my @temp;
-			foreach my $j(0..@arr_annot){
-				if(grep{$_ == $j} @$index){
-					my @tmp_split=split /,/,$arr_annot[$j];
-					push @temp,$tmp_split[$i];
-
-				}else{
-					push @temp,$arr_annot[$j];
-				}
-			}
-			push @split_annot,\@temp;
-			$i++;
-		}
-	}else{
-		push @split_annot, \@arr_annot;
-	}
+warn "-----------------------$gene --- $gene_func --- $exonic_func --------------------------\n";
+	}	
+	$arr_annot[$index->[0]]=$gene;
+	$arr_annot[$index->[1]]=$gene_func;
+	$arr_annot[$index->[2]]=$exonic_func;
+	push @split_annot, \@arr_annot;
 	return @split_annot;
 }
 	
@@ -180,4 +156,43 @@ sub deal_with_multigene{
 		}
 	}
 	return $gene;
+}
+
+### get the most severous annotation, if has multiple Func_refGene
+sub deal_with_multifunc{
+	# gene, func_refGene, Func_exonic
+	my @fg=split /;/, $_[0];
+ 	my @g=split /,/,$_[1];
+    my @fe=split /;/,$_[2];
+	my %fg_piority=(
+		"exonic" => 1,
+		"splicing" => 2,
+		"UTR3" => 3,
+		"UTR5" => 3,
+		"intronic" => 4,
+		"ncRNA_exonic" => 6,
+		"ncRNA_intronic" => 7,
+		"upstream" => 5,
+		"downstream" => 5,
+		"intergenic" => 8
+		);
+	my @fg_weight=map{$fg_piority{$_}} split /;/, $fg;
+	my ($min,$index)=index_min(@fg_weight);
+	if($min==1){
+		return ($g[$index], $fg[$index], $fe);
+	}else{
+		return ($g[$index], $fg[$index], ".");
+}
+
+### find the min and index from an array
+sub index_min{
+	my ($min,$index)=(-1,-1);
+	for(my $i=0;$i<@_;$i++){
+		($min,$index)=($_[$i],0) if $index<0;
+		if($min>$_[$i]){
+			$min=$_[$i];
+			$index=$i;
+		}
+	}
+	return ($min, $index);
 }
