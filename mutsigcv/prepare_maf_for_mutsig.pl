@@ -31,8 +31,8 @@ while(<FILE>){
 		}
 		my $effect = define_effect($arr[$header{'Func_refGene'}], $arr[$header{'ExonicFunc_refGene'}]);
 		### if found 'unknown' effect, warning and skip
-		if($effect eq "null"){
-			#print STDERR "\"unknown\" effect found in <\"",join "\t", @arr,"\">, this annotation will be skipped.\n";
+		if($effect eq "unknown"){
+			print STDERR "\"unknown\" effect found in <\"",join "\t", @arr,"\">, this annotation will be skipped.\n";
 #print STDERR $_,"\n";
 			undef @sub_arr;
 			next;
@@ -62,7 +62,7 @@ sub define_effect{
 	my $func_gene=shift;
 	my $func_exonic=shift;
 	my $func;
-	my $effect="null";
+	my $effect="unknown";
 	my @noncoding_arr=qw/intergenic intronic ncRNA_exonic ncRNA_intronic upstream downstream UTR3 UTR5 splicing/;
 	my @silent_arr=qw/synonymous_SNV/;
 	my @nonsilent_arr=qw/nonsynonymous_SNV stopgain stoplost/;
@@ -73,9 +73,9 @@ sub define_effect{
 	}else{
 		$func_exonic=~s/\s+/_/g;
 		$func=($func_exonic eq '.' && $func_gene ne 'exonic') ? $func_gene : $func_exonic;
-		$effect="noncoding" if grep{$_ =~/$func/} @noncoding_arr;
-		$effect="silent" if grep{$_ =~/$func/} @silent_arr;
-		$effect="nonsilent" if grep{$_ =~ /$func/} @nonsilent_arr;
+		$effect="noncoding" if grep{$_ =~/\b$func\b/} @noncoding_arr;
+		$effect="silent" if grep{$_ =~/\b$func\b/} @silent_arr;
+		$effect="nonsilent" if grep{$_ =~ /\b$func\b/} @nonsilent_arr;
 		$effect="null" if grep{$_ =~ /$func/} @null_arr;
 	}
 	return $effect;	
@@ -163,7 +163,7 @@ sub deal_with_multifunc{
 	# gene, func_refGene, Func_exonic
 	my @fg=split /;/, $_[0];
  	my @g=split /,/,$_[1];
-    my @fe=split /;/,$_[2];
+        my @fe=split /;/,$_[2];
 	my %fg_piority=(
 		"exonic" => 1,
 		"splicing" => 2,
@@ -176,12 +176,13 @@ sub deal_with_multifunc{
 		"downstream" => 5,
 		"intergenic" => 8
 		);
-	my @fg_weight=map{$fg_piority{$_}} split /;/, $fg;
+	my @fg_weight=map{$fg_piority{$_}} split /;/, $_[0];
 	my ($min,$index)=index_min(@fg_weight);
 	if($min==1){
-		return ($g[$index], $fg[$index], $fe);
+		return ($g[$index], $fg[$index], $_[2]);
 	}else{
 		return ($g[$index], $fg[$index], ".");
+	}
 }
 
 ### find the min and index from an array
