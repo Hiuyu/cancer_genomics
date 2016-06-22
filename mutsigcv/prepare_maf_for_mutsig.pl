@@ -8,8 +8,8 @@ use strict;
 use List::Util qw(min max reduce);
 
 my %header;
-my $sample=shift @ARGV;
-my $INPUT="/data/home/zuoxy/data/NPC/somatic/20160519_863closing/4-driver_gene/2-annovar_output/${sample}.hg19_multianno.txt";
+#my $INPUT="/data/home/zuoxy/data/NPC/somatic/20160519_863closing/4-driver_gene/2-annovar_output/${sample}.hg19_multianno.txt";
+my $INPUT=shift @ARGV;
 my @require_header=qw/Gene_refGene Chr Start Ref Alt/;
 my @sub_arr;
 my @index_multianno_check;
@@ -19,7 +19,7 @@ while(<FILE>){
 	if($.==1){
 		%header=get_header($_);
 		@index_multianno_check=($header{'Gene_refGene'},$header{'Func_refGene'},$header{'ExonicFunc_refGene'});
-		print "gene\tchr\tstart\tref_allele\tnewbase\teffect\tpatient\n";
+		#print "gene\tchr\tstart\tref_allele\tnewbase\teffect\tpatient\n";
 		next;
 	}
 	### if multiple annotation, do it one by one
@@ -32,7 +32,7 @@ while(<FILE>){
 		my $effect = define_effect($arr[$header{'Func_refGene'}], $arr[$header{'ExonicFunc_refGene'}]);
 		### if found 'unknown' effect, warning and skip
 		if($effect eq "unknown"){
-			print STDERR "\"unknown\" effect found in <\"",join "\t", @arr,"\">, this annotation will be skipped.\n";
+#			print STDERR "\"unknown\" effect found in <\"",join "\t", @arr,"\">, this annotation will be skipped.\n";
 #print STDERR $_,"\n";
 			undef @sub_arr;
 			next;
@@ -44,6 +44,7 @@ while(<FILE>){
 	}
 		
 }
+close FILE;
 
 sub get_header{
 	my %name;
@@ -106,12 +107,9 @@ sub check_and_split_annot{
 				$gene=deal_with_multigene($gene);
 				#die "$gene\n";
 			}
-#warn "$_\n";
-#warn "-----------------------$gene--------------------------\n";
 		}
 	}else{
 		($gene,$gene_func,$exonic_func)=deal_with_multifunc($gene,$gene_func,$exonic_func);
-warn "$_\n";
 warn "-----------------------$gene --- $gene_func --- $exonic_func --------------------------\n";
 	}	
 	$arr_annot[$index->[0]]=$gene;
@@ -161,8 +159,8 @@ sub deal_with_multigene{
 ### get the most severous annotation, if has multiple Func_refGene
 sub deal_with_multifunc{
 	# gene, func_refGene, Func_exonic
-	my @fg=split /;/, $_[0];
- 	my @g=split /,/,$_[1];
+	my @fg=split /;/, $_[1];
+ 	my @g=split /;/,$_[0];
         my @fe=split /;/,$_[2];
 	my %fg_piority=(
 		"exonic" => 1,
@@ -176,12 +174,17 @@ sub deal_with_multifunc{
 		"downstream" => 5,
 		"intergenic" => 8
 		);
-	my @fg_weight=map{$fg_piority{$_}} split /;/, $_[0];
+	my @fg_weight=map{$fg_piority{$_}} split /;/, $_[1];
 	my ($min,$index)=index_min(@fg_weight);
+	my $gene=$g[$index];
+	if($gene=~/,/){
+		my @tmp=split /,/, $gene;
+		$gene=shift @tmp;
+	}
 	if($min==1){
-		return ($g[$index], $fg[$index], $_[2]);
+		return ($gene, $fg[$index], $_[2]);
 	}else{
-		return ($g[$index], $fg[$index], ".");
+		return ($gene, $fg[$index], ".");
 	}
 }
 
