@@ -3,14 +3,22 @@
 # Title: prepare mutsig input file from annovar output
 # Author: Xiao-yu Zuo
 # Date: 2016-06-16
+# 2016-06-22:
+# 	modify arguments: arg1=sample id; arg2=tab table to input; arg3-argN=other fields to keep
+#
 #############################
 use strict;
 use List::Util qw(min max reduce);
 
 my %header;
 #my $INPUT="/data/home/zuoxy/data/NPC/somatic/20160519_863closing/4-driver_gene/2-annovar_output/${sample}.hg19_multianno.txt";
-my $INPUT=shift @ARGV;
-my @require_header=qw/Gene_refGene Chr Start Ref Alt/;
+my $sample=shift @ARGV; #arg1: sample id
+my $INPUT=shift @ARGV; #arg2: annovar txt output
+my @include_vars=@ARGV; # arg3-: other field to include
+my @require_header=qw/Gene_refGene CHROM POS REF ALT/;
+if($#include_vars>-1){
+	push @require_header, @include_vars;
+}
 my @sub_arr;
 my @index_multianno_check;
 open FILE, "<", $INPUT or die "$INPUT not found\n";
@@ -19,7 +27,12 @@ while(<FILE>){
 	if($.==1){
 		%header=get_header($_);
 		@index_multianno_check=($header{'Gene_refGene'},$header{'Func_refGene'},$header{'ExonicFunc_refGene'});
-		#print "gene\tchr\tstart\tref_allele\tnewbase\teffect\tpatient\n";
+		print "gene\tchr\tstart\tref_allele\tnewbase\t";
+		if($#include_vars > -1){
+			print join "\t", @include_vars;
+			print "\t";
+		}
+		print "effect\tpatient\n";
 		next;
 	}
 	### if multiple annotation, do it one by one
@@ -39,7 +52,8 @@ while(<FILE>){
 		}
 		push @sub_arr, $effect;
 		push @sub_arr, $sample;
-		print join "\t", @sub_arr,"\n";
+		print join "\t", @sub_arr;
+		print "\n";
 		undef @sub_arr;
 	}
 		
