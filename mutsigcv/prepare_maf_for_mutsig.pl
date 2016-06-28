@@ -42,6 +42,8 @@ while(<FILE>){
 		foreach(@require_header){
 			push @sub_arr, $arr[$header{$_}];
 		}
+		## 0-based to 1-based conversion
+		@sub_arr[1..4]=recode_coord(@sub_arr[1..4]);
 		my $effect = define_effect($arr[$header{'Func_refGene'}], $arr[$header{'ExonicFunc_refGene'}]);
 		### if found 'unknown' effect, warning and skip
 		if($effect eq "unknown"){
@@ -59,6 +61,31 @@ while(<FILE>){
 		
 }
 close FILE;
+
+###############################################################
+
+## 0-based coordinate to 1-based coordinate conversion
+sub recode_coord{
+	my ($chr,$start,$ref,$alt)=@_;
+	$chr=~s/^chr//;
+	if(length($ref) > length($alt) && length($alt)==1){
+                substr($alt, 0, 1)= "-";
+                $ref=substr($ref, 1);
+		$start=$start+1;
+	}elsif(length($ref) < length($alt) && length($ref)==1){
+	        substr($ref, 0, 1)= "-";
+                $alt=substr($alt, 1);	
+		$start=$start+1;
+	}elsif(length($ref) == length($alt) && length($ref)==1){
+		# do nothing
+		1;
+	}else{
+		my $err_log=join "\t--\t", @_;
+		$err_log .= "is strange in coordinates!\n";
+	}
+	return ($chr,$start,$ref,$alt);
+}
+
 
 sub get_header{
 	my %name;
