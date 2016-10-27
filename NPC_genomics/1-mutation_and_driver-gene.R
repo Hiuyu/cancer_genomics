@@ -2,6 +2,9 @@ library(dplyr)
 library(dtplyr)
 library(reshape2)
 library(ggplot2)
+library(grid)
+library(gtable)
+library(gridExtra)
 library(VennDiagram)
 library(GenomicRanges)
 setwd("C:/Users/LibJu/workspace/myData/NPC/cancer_genomics/caller_comparison")
@@ -333,12 +336,13 @@ D.norep.noback.coding_UTR.wes.withAD = D.norep_snv_indel %>%
   filter(index %in% D.norep.noback.coding_UTR.wes$index)
 
 # save 
-save(D.norep_snv_indel,
+save(D.all_snv_indel,
+     D.norep_snv_indel,
      D.norep_snv_indel_QC,
      D.norep.noback.coding_UTR.wes.withAD,
      D.norep.noback.coding_UTR.wes,
      file="npc_norep_nobacklist_shared2_pop0.01_wes_objects.RData"
-     )
+)
 
 # to maftools
 tmp.d=D.norep.noback.coding_UTR.wes %>%
@@ -409,26 +413,35 @@ for(i in 1:length(tmp.name)){
 tmp.summary$method=factor(z,levels = tmp.name)
 
 # dn/ds plot
-tmp.d=tmp.summary%>%mutate(sample_frac=n_sample/474, dn_ds=n_missense/n_silent)
+tmp.d=tmp.summary%>%mutate(sample_frac=sum(n_nonsense+n_missense+n_silent)/474, dn_ds=(n_nonsense+n_missense)/n_silent)
 tmp.max=max(tmp.d$dn_ds[!(tmp.d$dn_ds==Inf | is.nan(tmp.d$dn_ds))])
 tmp.d$dn_ds[tmp.d$dn_ds==Inf]=tmp.max+5
 tmp.d=tmp.d%>%filter(!is.nan(dn_ds))
-tmp.d1=tmp.d%>%filter(Gene_refGene%in%c("CYLD","TP53","RYR2","TRAF3","NFKBIA"))
 intersted=c("CYLD","TP53","RYR2","TRAF3","NFKBIA","TNFAIP3","PTEN","KRAS","NRAS","ARID1A","BAP1","KMT2C","KMT2D","ATM","UBN1")
 nfkb=c("TNF","RAN","TNFAIP3","CYLD","BCL10","RIPK2","PRKCA","TNFRSF1A","NFKB1","TRAF6","MALT1","ERC1","RELA","IKBKG","IKBKB","BIRC2","XPO1","CHUK","NOD2","UBE2D3","NFKBIA","ATM","BTRC")
 top2=c("RHOA","DCN","EP300","TGFBR2","DGKG","PIK3C2G","PIK3CA","PLCZ1","CACNA1A","CACNA1C","DUSP6","FGF6","FGFR3","HRAS","NRAS","NTF3","TGFBR2","TP53","TRAF2","FGF23","TAOK1")
 library(ggrepel)
-ggplot(tmp.d,aes(x=sample_frac, y=log(dn_ds,base = 2)))+geom_point()+
-  geom_vline(xintercept = c(0.01,0.03),lty=2)+geom_hline(yintercept = log(c(0.25,1,4),base = 2),lty=2)+
-  geom_text_repel(data=tmp.d%>%filter(((ka_ks>4|ka_ks<0.25)&sample_frac>0.03)|sample_frac>0.05|Gene_refGene%in%intersted),aes(label=Gene_refGene)) +
-  facet_wrap(~method)
+# plot each method and shared results
+plist=list()
+for(s in tmp.name){
+  tmp.d1 = tmp.d%>%filter(method==s)
+  plist[[s]] <- ggplot(tmp.d1,aes(x=sample_frac,y=log(dn_ds,base=2)))+
+    geom_point() +
+    scale_x_continuous(labels = scales::percent) +
+    geom_vline(xintercept = c(0.01,0.03),lty=2) +
+    geom_hline(yintercept = log(c(0.25,1,4),base = 2),lty=2) +
+    ggtitle(s)
+  
+  plist[[s]] = plist[[s]] + geom_text_repel(data=tmp.d1 %>% filter(sample_frac > 0.05 & (dn_ds > 4 | dn_ds <0.25)), aes(label=Gene_refGene))
+}
+tmp.p=lapply(plist, function(x) ggplotGrob(x))
+pCombine <- arrangeGrob( tmp.p[[1]],tmp.p[[2]],tmp.p[[3]],tmp.p[[4]] ,ncol=2,nrow=2)
+grid.newpage()
+jpeg("dn-ds_for_all_method.jpeg",width=800,height=600)
+grid.draw(pCombine)
+dev.off()
 
-ggplot(tmp.d,aes(y=n_missense, x=n_silent))+geom_point()+
-  geom_vline(xintercept = c(0.01,0.03),lty=2)+geom_hline(yintercept = c(1,8),lty=2)+
-  geom_text_repel(data=tmp.d%>%filter(ka_ks>8&sample_frac>0.03),aes(label=Gene_refGene))
-
-ggplot(tmp.d,aes(x=sample_frac, y=log(ka_ks,base = 2)))+geom_point()+
-  geom_vline(xintercept = c(0.01,0.03),lty=2)+geom_hline(yintercept = log(c(0.25,1,4),base = 2),lty=2)+
-  geom_text_repel(data=tmp.d%>%filter(Gene_refGene%in%top2),aes(label=Gene_refGene)) + 
-  facet_wrap(~method)
+# the result shows we should better use shared results. the rightbottom method
+p=plist[["shared"]]
+p + ylim()
 
