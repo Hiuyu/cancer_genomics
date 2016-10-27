@@ -57,6 +57,8 @@ while(<>){
 }
 
 ### recode start, end, ref, alt based on its status: SNV, INSERTION, DELETION
+# In a vcf, especially after sample selection, some indels may have non-left representation, e.g. ATCCG -> AT. This should be converted to its minimal representation, i.e. TCCG -> T in 0-based coordination or CCG -> - in 1-based coordination.
+# This subroutine convert 0-based coordinates to 1-based coordinates, along with their alelles.
 sub recode_variant(){
 	my ($pos,$ref,$alt)=@_;
 	my ($start,$end);

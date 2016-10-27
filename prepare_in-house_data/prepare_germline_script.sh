@@ -15,11 +15,12 @@ echo "get subset raw"
 java -jar /data/home/zuoxy/apps/GenomeAnalysisTK/3.4.0/GenomeAnalysisTK.jar -R /data/home/guoym/reference/ucsc_hg19.fa -T SelectVariants --sample_file $sample_list --variant $variant0  -o $variant1 --excludeNonVariants --removeUnusedAlternates
 
 # left align and trim variant is for indels only, to get minimal represention of indels in a cohort
-echo "left align and trim variants"
-java -jar /data/home/zuoxy/apps/GenomeAnalysisTK/3.4.0/GenomeAnalysisTK.jar -R /data/home/guoym/reference/ucsc_hg19.fa -T LeftAlignAndTrimVariants --variant $variant1  -o $variant2 --splitMultiallelics --dontTrimAlleles
+## not aviable parameter --dontTrimAlleles in GATK3.4.0
+#echo "left align and trim variants"
+java -jar /data/home/zuoxy/apps/GenomeAnalysisTK/3.4.0/GenomeAnalysisTK.jar -R /data/home/guoym/reference/ucsc_hg19.fa -T LeftAlignAndTrimVariants --variant $variant1  -o $variant2 --splitMultiallelics #--dontTrimAlleles
 
 echo "QC genotypes with minDP > 5 and minGQ > 10"
 vcftools --vcf $variant2 --minDP 5 --maxDP 2000 --minGQ 10 --recode --stdout > $variant3
 
 
-rm $variant{1,2}
+#rm $variant{1,2}
