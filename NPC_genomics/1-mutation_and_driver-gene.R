@@ -395,25 +395,27 @@ gene.mut_mat[gene.mut_mat>1]=1
 write.csv(gene.mut_mat,file = "sample_gene_matrix.csv")
 
 
+load("npc_norep_nobacklist_shared2_pop0.01_wes_objects.RData")
 ## summary gene status, compute for all methods
 gene.summary = lapply(unique(D.norep_snv_indel_QC$caller),function(x){
   summarize_by_gene_annovar(D.norep_snv_indel_QC %>%
-                              filter(caller==x)
+                              filter(caller==x)%>%
+                              filter(ExonicFunc_refGene != "non-exonic" & type=="SNV")
   )
 })
 names(gene.summary)=unique(D.norep_snv_indel_QC$caller)
-gene.summary$shared=summarize_by_gene_annovar(D.norep.noback.coding_UTR.wes)
-z=rep(names(gene.summary),sapply(gene.summary,nrow))
-gene.summary1=gene.summary
+gene.summary[["shared"]]=summarize_by_gene_annovar(D.norep.noback.coding_UTR.wes %>%
+                                                     filter(ExonicFunc_refGene != "non-exonic" & type=="SNV")
+)
 tmp.summary=NULL
 tmp.name=names(gene.summary)
 for(i in 1:length(tmp.name)){
   tmp.summary=rbind(tmp.summary,gene.summary[[tmp.name[i]]])
 }
-tmp.summary$method=factor(z,levels = tmp.name)
+tmp.summary$method = factor(rep(names(gene.summary),sapply(gene.summary,nrow)),levels=tmp.name)
 
 # dn/ds plot
-tmp.d=tmp.summary%>%mutate(sample_frac=sum(n_nonsense+n_missense+n_silent)/474, dn_ds=(n_nonsense+n_missense)/n_silent)
+tmp.d=tmp.summary%>%mutate(sample_frac=n_sample/474, dn_ds=(n_nonsense+n_missense)/n_silent)
 tmp.max=max(tmp.d$dn_ds[!(tmp.d$dn_ds==Inf | is.nan(tmp.d$dn_ds))])
 tmp.d$dn_ds[tmp.d$dn_ds==Inf]=tmp.max+5
 tmp.d=tmp.d%>%filter(!is.nan(dn_ds))
