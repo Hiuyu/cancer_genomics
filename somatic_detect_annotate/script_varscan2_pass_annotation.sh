@@ -33,7 +33,8 @@ do
     next unless $.>1 || $F[0] =~ /^chr[MXY\d][\d]*$/;
     $gt0="$F[2]/$F[2]";
     $gt1=$F[8]==0?"$F[2]/$F[3]":"$F[3]/$F[3]";
-    print join "\t",($F[0],$F[1],$F[1],$F[2],$F[3],"'$sample'",$gt0,"$F[4],$F[5]",$gt1,"$F[8],$F[9]");
+    # the first 5 columns were repeated, in order to keep original 0-based coordination to make consistent to the GATK output
+    print join "\t",($F[0],$F[1],$F[1],$F[2],$F[3],$F[0],$F[1],$F[1],$F[2],$F[3],"'$sample'",$gt0,"$F[4],$F[5]",$gt1,"$F[8],$F[9]");
   ' >> body.${OUT_PREFIX}.out
   # formatting INDEL output
   cat $source_single_path/${sample}_${indel_surfix} | perl -lwane '
@@ -72,6 +73,7 @@ do
     }
     $gt0N = "$ref0/$ref0"; # use 0-based genotype
     $gt0T = $F[8] == 0 ? "$alt0/$alt0" : "$ref0/$alt0" ; 
+    # INDEL should keep original 0-based coordination to make consistent to the GATK output
     print join "\t",($chr,$start1,$end1,$ref1,$alt1,$chr,$start0,$end0,$ref0,$alt0,"'$sample'",$gt0N,"$F[4],$F[5]",$gt0T,"$F[8],$F[9]");
   ' >> body.${OUT_PREFIX}.out
 done
@@ -97,7 +99,7 @@ perl /data/home/zuoxy/apps/annovar/2015Dec14/table_annovar.pl $PASS_INPUT /data/
 ##########################
 echo "to table"
 echo -e "CHROM\tStart\tEnd\tREF\tALT\tSAMPLE\tNORMAL.GT\tNORMAL.AD\tTUMOR.GT\tTUMOR.AD" > $ANV_PREFIX.part1.txt
-cat $PASS_INPUT >> $ANV_PREFIX.part1.txt
+cat $PASS_INPUT | cut -f 6-  >> $ANV_PREFIX.part1.txt
 cat $ANV_PREFIX.hg19_multianno.txt|cut -f 6- > $ANV_PREFIX.part2.txt
 paste $ANV_PREFIX.part1.txt $ANV_PREFIX.part2.txt  > ${ANV_PREFIX}_annotate.tsv
 rm $ANV_PREFIX.part1.txt $ANV_PREFIX.part2.txt
