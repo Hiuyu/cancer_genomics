@@ -7,19 +7,29 @@ library(gtable)
 library(gridExtra)
 library(VennDiagram)
 library(GenomicRanges)
-setwd("C:/Users/LibJu/workspace/myData/NPC/cancer_genomics/caller_comparison")
-source("C:/Users/LibJu/workspace/Github-project_scripts-repository/cancer_genomics/NPC_genomics/0-helper_function.R")
+# in windows
+#setwd("C:/Users/LibJu/workspace/myData/NPC/cancer_genomics/caller_comparison")
+#source("C:/Users/LibJu/workspace/Github-project_scripts-repository/cancer_genomics/NPC_genomics/0-helper_function.R")
+# in cluster
+source("/data/home/zuoxy/data/NPC/somatic/20160519_863closing/11-oncomap_analysis_workspace/scripts_npc_project_also_in_github/cancer_genomics/NPC_genomics/0-helper_function.R")
+
+####
+#start
+####
 message("start")
 mutect2<-as.data.frame(data.table::fread("mutect2_pass_annotate.tsv"))
 mutect<-as.data.frame(data.table::fread("mutect_pass_annotate.tsv"))
-varscan.snv<-as.data.frame(data.table::fread("varscan2_pass_snv_annotate.tsv"))
-varscan.indel<-as.data.frame(data.tabcle::fread("varscan2_pass_indel_annotate.tsv"))
-varscan=rbind(varscan.snv,varscan.indel)
+varscan<-as.data.frame(data.table::fread("varscan2_pass_annotate.tsv"))
 ## get the population frequency colnames
 pop.freq.col=colnames(mutect2)[sapply(colnames(mutect2),function(x){
-  grepl("ExAC",x)|grepl("1000g",x)
+  grepl("ExAC",x)|grepl("1000g",x)|grepl("CANCER_FREE_[AN]F",x)
 })]
-pop.freq.col=c(pop.freq.col,"SYSUCC_CANCER_FREE_AF")
+
+# if no annotation for the Func_refGene and Gene_refGene, remove the variant
+mutect2 = mutect2 %>% filter(Func_refGene != "." & Gene_refGene != ".")
+mutect = mutect %>% filter(Func_refGene != "." & Gene_refGene != ".")
+varscan = varscan2 %>% filter(Func_refGene != "." & Gene_refGene != ".")
+
 print("removing ambigious annotation")
 amb=with(mutect2, wrapper_remove_ambigious_find_nearest(Gene_refGene,Func_refGene,ExonicFunc_refGene,GeneDetail_refGene,sep1="\\\\x3b",sep2="\\\\x3d"))
 mutect2=within(mutect2,{
@@ -41,7 +51,7 @@ mutect=within(mutect,{
 })
 varscan$ExonicFunc_refGene=gsub("\\s+","_",varscan$ExonicFunc_refGene)
 amb=with(varscan, wrapper_remove_ambigious_find_nearest(Gene_refGene,Func_refGene,ExonicFunc_refGene,GeneDetail_refGene,sep1=";",sep2="="))
-varscan=within(varscan,{
+varscan1=within(varscan,{
   source=decide_source(SAMPLE)
   type=decide_variant_type(REF,ALT)
   Gene_refGene=amb$gene
@@ -51,9 +61,11 @@ varscan=within(varscan,{
 })
 save.image("raw_all_input_3caller_3callers.RData")
 ####### part 1 WES SNV comparison #####
-D.mt2=mutect2%>%select(CHROM,POS,REF,ALT,SAMPLE,Gene_refGene,Func_refGene,ExonicFunc_refGene,TUMOR.GT,TUMOR.AD,NORMAL.GT,NORMAL.AD,one_of(pop.freq.col),SYSUCC_CANCER_FREE_NC,type,source,GeneDetail_refGene,AAChange_refGene)
-D.mt=mutect%>%select(CHROM,POS,REF,ALT,SAMPLE,Gene_refGene,Func_refGene,ExonicFunc_refGene,TUMOR.GT,TUMOR.AD,NORMAL.GT,NORMAL.AD,one_of(pop.freq.col),SYSUCC_CANCER_FREE_NC,type,source,GeneDetail_refGene,AAChange_refGene)
-D.vs=varscan%>%select(CHROM,POS=Start,REF,ALT,SAMPLE,Gene_refGene,Func_refGene,ExonicFunc_refGene,TUMOR.GT,TUMOR.AD,NORMAL.GT,NORMAL.AD,one_of(pop.freq.col),SYSUCC_CANCER_FREE_NC,type,source,GeneDetail_refGene,AAChange_refGene)
+# remove some discordant columns to make them "rbind"-able
+D.mt2=mutect2%>%select(everything(),-TUMOR.FA,-NORMAL.FA)
+D.mt=mutect%>%select(everything(),-TUMOR.FA,-NORMAL.FA)
+D.vs=varscan%>%select(everything(),POS=Start,-End)
+
 # total number of SNV count
 print(paste("ALL variant count for mutect2, mutect, varscan is ",nrow(D.mt2), nrow(D.mt), nrow(D.vs)))
 caller=c(rep("mutect2",nrow(D.mt2)),
@@ -63,30 +75,33 @@ caller=c(rep("mutect2",nrow(D.mt2)),
 D.all=cbind(rbind(D.mt2,D.mt,D.vs),caller)
 
 ## recode population frequency to be numeric
-for(x in c(pop.freq.col,"SYSUCC_CANCER_FREE_NC")){
+for(x in pop.freq.col){
   D.all[D.all[,x]==".",x]="0"
   D.all[,x]=as.numeric(D.all[,x])
   D.all[is.na(D.all[,x]),x]=0
 }
-# very time consuming ! ! !
+
+# very time consuming ! ! ! but no need in cluster
 # find the max pop.freq in 1000G and ExAC
-tmp.freq=D.all[,pop.freq.col]
-D.all$max.pop.freq=0
+# tmp.freq=D.all[,pop.freq.col]
+# D.all$max.pop.freq=0
+# print("finding max pop freq")
+# i=1
+# while(i<=nrow(D.all)){
+#   D.all$max.pop.freq[i]=max(tmp.freq[i,])
+#   if(i%%50000==0){message(paste0("parsed ",i/1000,"K sites"))}
+#   i=i+1
+# }
 print("finding max pop freq")
-i=1
-while(i<=nrow(D.all)){
-  D.all$max.pop.freq[i]=max(tmp.freq[i,])
-  if(i%%50000==0){message(paste0("parsed ",i/1000,"K sites"))}
-  i=i+1
-}
+tmp.freq=apply(D.all[,pop.freq.col],1,function(x) max(x))
+D.all$max.pop.freq = tmp.freq
+
 D.all$pop.freq=.assign_pop_freq_group(D.all$max.pop.freq)
 D.all_snv_indel=D.all
 # set index
 D.all_snv_indel=D.all_snv_indel%>%mutate(index=paste0(SAMPLE,"_",CHROM,":",POS,"_",REF,">",ALT))
-output_file="ALL_SNV_INDEL_3callers_20160926.RData"
-save(D.all_snv_indel,file=output_file)
-print(paste("all done, please load()",output_file,"in R"))
 
+# add region column flag
 D.all_snv_indel$region="non-exon"
 D.all_snv_indel$region[D.all_snv_indel$Func_refGene %in% c("exonic","UTR3","UTR5","splicing")] = "exon+UTR+splicing"
 D.all_snv_indel=within(D.all_snv_indel,{ExonicFunc_refGene[ExonicFunc_refGene == "."]="non-exonic"})
@@ -96,19 +111,24 @@ D.all_snv_indel=within(D.all_snv_indel,{ExonicFunc_refGene[ExonicFunc_refGene ==
 #ggplot(tmp.df, aes(x=caller,y=value,fill=ExonicFunc_refGene))+geom_bar(stat="identity",position="stack")+ylab("frequency") +
 #  ggtitle("only Exonic variants") +facet_grid(type+region~source)
 
-## generate concordance table for callers
-tmp.rmcol=colnames(D.all_snv_indel)[grepl("AFR|EAS|EUR|AMR|FIN|OTH|SAS|NFE$",colnames(D.all_snv_indel),ignore.case = TRUE)]
-D.all.1=D.all_snv_indel%>%select(-one_of(tmp.rmcol),-starts_with("TUMOR"),-starts_with("NORMAL"))
-# reconstruct data
-D.all.2=subset(D.all.1,!duplicated(D.all.1$index))
-D.all.2$mutect=FALSE; D.all.2$mutect[D.all.2$index %in% D.all.1$index[D.all.1$caller=="mutect"]]=TRUE
-D.all.2$mutect2=FALSE; D.all.2$mutect2[D.all.2$index %in% D.all.1$index[D.all.1$caller=="mutect2"]]=TRUE
-D.all.2$varscan2=FALSE; D.all.2$varscan2[D.all.2$index %in% D.all.1$index[D.all.1$caller=="varscan2"]]=TRUE
-D.all.2$share_times= D.all.2$mutect + D.all.2$mutect2 + D.all.2$varscan2
+## saving objects
+output_file="ALL_SNV_INDEL_3callers_updated_in-house-data_20161028.RData"
+save(D.all_snv_indel,file=output_file)
+print(paste("all done, please load()",output_file,"in R"))
 
-## filter germline
-D.all.1.filter=D.all.1%>%filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NC < 3 )
-D.all.2.filter=D.all.2%>%filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NC < 3 )
+# ## generate concordance table for callers
+# tmp.rmcol=colnames(D.all_snv_indel)[grepl("AFR|EAS|EUR|AMR|FIN|OTH|SAS|NFE$",colnames(D.all_snv_indel),ignore.case = TRUE)]
+# D.all.1=D.all_snv_indel%>%select(-one_of(tmp.rmcol),-starts_with("TUMOR"),-starts_with("NORMAL"))
+# # reconstruct data
+# D.all.2=subset(D.all.1,!duplicated(D.all.1$index))
+# D.all.2$mutect=FALSE; D.all.2$mutect[D.all.2$index %in% D.all.1$index[D.all.1$caller=="mutect"]]=TRUE
+# D.all.2$mutect2=FALSE; D.all.2$mutect2[D.all.2$index %in% D.all.1$index[D.all.1$caller=="mutect2"]]=TRUE
+# D.all.2$varscan2=FALSE; D.all.2$varscan2[D.all.2$index %in% D.all.1$index[D.all.1$caller=="varscan2"]]=TRUE
+# D.all.2$share_times= D.all.2$mutect + D.all.2$mutect2 + D.all.2$varscan2
+
+# ## filter germline
+# D.all.1.filter=D.all.1%>%filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NC < 3 )
+# D.all.2.filter=D.all.2%>%filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NC < 3 )
 #D.all.2.exonic %>% filter(Func_refGene %in% c("UTR3","UTR5","splicing","exonic"))
 
 # ## concordance analysis: venn plot
@@ -259,9 +279,10 @@ D.norep.2$share_times= D.norep.2$mutect + D.norep.2$mutect2 + D.norep.2$varscan2
 #save(D.norep.1,D.norep.2,file="norep_3callers_20160930.RData")
 
 ## exclude excluded or not-interested gene (PMID:22294350)
-backlist_gene_PMID22294350=read.table("PMID22294350_Table_S7_gene_exclusion_list_final.txt",stringsAsFactors = F,header=F,sep="\t")
-backlist_gene_PMID22294350=toupper(backlist_gene_PMID22294350[,1])
+#backlist_gene_PMID22294350=read.table("PMID22294350_Table_S7_gene_exclusion_list_final.txt",stringsAsFactors = F,header=F,sep="\t")
+#backlist_gene_PMID22294350=toupper(backlist_gene_PMID22294350[,1])
 #save(backlist_gene_PMID22294350,file="backlist_gene_PMID22294350_TableS7.RData")
+load("backlist_gene_PMID22294350_TableS7.RData")
 # excluded backlist genes and MUC family,
 # D.norep.noback.exon.2=D.norep.2%>%filter(!Gene_refGene%in%backlist_gene_PMID22294350) %>% 
 #   filter(!grepl("\\bMUC\\d+",Gene_refGene) ) %>%
@@ -310,43 +331,49 @@ backlist_gene_PMID22294350=toupper(backlist_gene_PMID22294350[,1])
 
 
 ### combine all filtering steps
+# single method pass QC
 D.norep_snv_indel_QC=D.norep_snv_indel %>%
   filter(!Gene_refGene%in%backlist_gene_PMID22294350) %>% 
   filter(!grepl("\\bMUC\\d+",Gene_refGene) ) %>%
   filter(!grepl("\\bOR\\d+",Gene_refGene)) %>%
   filter(region=="exon+UTR+splicing") %>%
+  filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NF < 0.01) %>% 
   filter(source=="WES") %>%
   mutate(REF=REF1,ALT=ALT1) %>%
   select(-REF1, -ALT1,-POS) %>%
   arrange(CHROM,start)
 
+# pass QC and shared variants
 D.norep.noback.coding_UTR.wes=D.norep.2 %>%
   filter(!Gene_refGene%in%backlist_gene_PMID22294350) %>% 
   filter(!grepl("\\bMUC\\d+",Gene_refGene) ) %>%
   filter(!grepl("\\bOR\\d+",Gene_refGene)) %>%
   filter(region=="exon+UTR+splicing") %>%
   filter((share_times>1 & type=="SNV") | (share_times>1 & type=="INDEL")) %>% 
-  filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_AF < 0.01) %>% 
+  filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NF < 0.01) %>% 
   filter(source=="WES") %>%
   mutate(REF=REF1,ALT=ALT1) %>%
   select(-REF1, -ALT1,-POS) %>%
   arrange(CHROM,start)
+
 # melt form of data, with mutation AF
 D.norep.noback.coding_UTR.wes.withAD = D.norep_snv_indel %>%
   filter(index %in% D.norep.noback.coding_UTR.wes$index)
 
-# save 
-save(D.all_snv_indel,
-     D.norep_snv_indel,
-     D.norep_snv_indel_QC,
-     D.norep.noback.coding_UTR.wes.withAD,
-     D.norep.noback.coding_UTR.wes,
-     file="npc_norep_nobacklist_shared2_pop0.01_wes_objects.RData"
+# save all objects in QC steps
+save(D.all_snv_indel, # raw variants for WGS and WES, SNV and INDEL, before any filtering
+     D.norep_snv_indel, # raw variants + repeatmasker filtering
+     D.norep_snv_indel_QC, # raw varaints + repeatmasker + blacklist gene + exon_UTR + germline filtering
+     D.norep.noback.coding_UTR.wes.withAD, # filtered variants + shared by 2 callers
+     D.norep.noback.coding_UTR.wes, # another form of shared variants past QC
+     file="npc_norep_nobacklist_shared2_pop0.01_wes_objects_20161028.RData"
 )
 
+##### tricks: convert annovar output to MAF. 
+## require maftools packages, which is not available on cluster
 # to maftools
 tmp.d=D.norep.noback.coding_UTR.wes %>%
-  dplyr::select(Chr=chr,
+  dplyr::select(Chr=CHROM,
                 Start=start,
                 End=end,
                 Ref=REF,
@@ -355,10 +382,10 @@ tmp.d=D.norep.noback.coding_UTR.wes %>%
                 Gene.refGene=Gene_refGene,
                 GeneDetail.refGene=GeneDetail_refGene,
                 ExonicFunc.refGene=ExonicFunc_refGene,
-                #AAChange.refGene=AAChange_refGene,
+                AAChange.refGene=AAChange_refGene,
                 SAMPLE=SAMPLE
   )
-prefix="wes"
+prefix="wes_updated_SYSUCC_NF"
 out_file=paste0(prefix,".txt")
 cat(colnames(tmp.d)[1:11], file=out_file,sep="\t")
 cat("\n",file=out_file,append=TRUE)
@@ -380,6 +407,7 @@ plotOncodrive(res = npc.oncodrive, fdrCutOff = 0.05, useFraction = FALSE)
 
 
 
+
 ## prepare for next step: signature and prognostics
 D.coding_splicing.wes=D.norep.noback.coding_UTR.wes %>% 
   filter(Func.refGene %in% c("exonic", "splicing")) %>%
@@ -395,8 +423,9 @@ gene.mut_mat[gene.mut_mat>1]=1
 write.csv(gene.mut_mat,file = "sample_gene_matrix.csv")
 
 
-load("npc_norep_nobacklist_shared2_pop0.01_wes_objects.RData")
+load("npc_norep_nobacklist_shared2_pop0.01_wes_objects_20161028.RData")
 ## summary gene status, compute for all methods
+## use only coding SNV
 gene.summary = lapply(unique(D.norep_snv_indel_QC$caller),function(x){
   summarize_by_gene_annovar(D.norep_snv_indel_QC %>%
                               filter(caller==x)%>%
@@ -433,17 +462,78 @@ for(s in tmp.name){
     geom_vline(xintercept = c(0.01,0.03),lty=2) +
     geom_hline(yintercept = log(c(0.25,1,4),base = 2),lty=2) +
     ggtitle(s)
-  
-  plist[[s]] = plist[[s]] + geom_text_repel(data=tmp.d1 %>% filter(sample_frac > 0.05 & (dn_ds > 4 | dn_ds <0.25)), aes(label=Gene_refGene))
 }
-tmp.p=lapply(plist, function(x) ggplotGrob(x))
+thres=c(0.05,0.05,0.05,0.03)
+plist.1=plist
+plist.1=lapply(1:length(thres),function(x){
+  plist[[x]] + geom_text_repel(data=tmp.d %>% filter(method==tmp.name[x]) %>%
+                                 filter((sample_frac > thres[x] & (dn_ds > 4 | dn_ds <0.25)) | 
+                                          Gene_refGene %in% nfkb), 
+                               aes(label=Gene_refGene))
+})
+tmp.p=lapply(plist.1, function(x) ggplotGrob(x))
 pCombine <- arrangeGrob( tmp.p[[1]],tmp.p[[2]],tmp.p[[3]],tmp.p[[4]] ,ncol=2,nrow=2)
 grid.newpage()
 jpeg("dn-ds_for_all_method.jpeg",width=800,height=600)
 grid.draw(pCombine)
 dev.off()
 
-# the result shows we should better use shared results. the rightbottom method
-p=plist[["shared"]]
-p + ylim()
+### the mutant allele frequency concordance between shared methods
+tmp.ad = D.norep.noback.coding_UTR.wes.withAD %>% 
+  filter(ExonicFunc_refGene != "non-exonic" & type=="SNV") %>%
+  select(index, caller, TUMOR.AD, NORMAL.AD)
+tmp.z = parse_GATK_AD_field(tmp.ad$TUMOR.AD)
+tmp.ad$TUMOR.AF=tmp.z$AF
+tmp.ad$TUMOR.DP=tmp.z$DP
+tmp.af = tmp.ad %>% select(everything(),-TUMOR.AD, -NORMAL.AD)
+# get the AF matrix
+tmp.afm = dcast(tmp.af, index~caller,value.var="TUMOR.AF")
+p1=ggplot(tmp.afm,aes(mutect,mutect2))+geom_point() + ggtitle("mutect vs mutect2")
+p2=ggplot(tmp.afm,aes(mutect2,varscan2))+geom_point() + ggtitle("mutect2 vs varscan2")
+p3=ggplot(tmp.afm,aes(mutect,varscan2))+geom_point() + ggtitle("mutect vs varscan2")
+gl <- lapply(list(p1,p2,p3), function(x) ggplotGrob(x + geom_smooth(method="lm",se=TRUE) + geom_abline(slope=1,intercept = 0) + theme_bw()))
+gt <- gtable(widths=unit(rep(1,3), "null"),
+             heights=unit(1, "null"))
+gt <- gtable_add_grob(gt, gl, l=1:3,r=1:3,t=1,b=1)
+grid.newpage()
+jpeg("AF comparison_codingSNV.jpeg",width=900,height=600)
+grid.draw(gt)
+dev.off()
+
+## since the AF is somewhat different for different method, using fitted value as the combined one
+part1 = tmp.afm%>%filter(!(is.na(mutect)|is.na(mutect2)) & is.na(varscan2))
+part2 = tmp.afm%>%filter(!(is.na(mutect)|is.na(varscan2))& is.na(mutect2))
+part3 = tmp.afm%>%filter(!(is.na(mutect2)|is.na(varscan2))& is.na(mutect))
+part4 = tmp.afm%>%filter(!(is.na(mutect2)|is.na(varscan2)| is.na(mutect)))
+tmp.m2m=lm(mutect2~mutect,data=part4[,-1])$fitted.values
+tmp.m2v2=lm(mutect2~varscan2,data=part4[,-1])$fitted.values
+tmp.mv2=lm(mutect~varscan2,data=part4[,-1])$fitted.values
+tmp.mm2=lm(mutect~mutect2,data=part4[,-1])$fitted.values
+tmp.v2m2=lm(varscan2~mutect2,data=part4[,-1])$fitted.values
+tmp.v2m=lm(varscan2~mutect,data=part4[,-1])$fitted.values
+resuid=cbind(tmp.m2m,tmp.mm2,tmp.mv2,tmp.v2m,tmp.m2v2,tmp.v2m2)
+colnames(resuid)=c("m2_m","m_m2","m_v2","v2_m","m2_v2","v2_m2")
+resuid=as.data.frame(resuid)
+library(GGally)
+ggpairs(resuid)
+ggpairs(part4[,-1])
+# use fitted value to estimate mutant allele fraction
+tmp.newAF=c(lm(mutect2~mutect,data=part1)$fitted.values,
+      lm(mutect~varscan2,data=part2)$fitted.values,
+      lm(mutect2~varscan2,data=part3)$fitted.values,
+      lm(mutect~varscan2,data=part4)$fitted.values
+      )
+newAF = data.frame(index=rbind(part1,part2,part3,part4)[,1],TUMOR.AF.est=tmp.newAF)
+
+D.norep.noback.coding_UTR.shared.wes.withAF = merge(D.norep.noback.coding_UTR.wes,newAF)
+save(D.norep.noback.coding_UTR.shared.wes.withAF, file="npc_passQC_wes_final_20161029_object.RData")
+
+tmp.af=withAF%>%filter(Gene_refGene%in%c("CYLD","TRAF3","TP53","NLRC5","SPATA3"))%>%select(SAMPLE,Gene_refGene,TUMOR.AF.est)
+ggplot(tmp.af,aes(x=SAMPLE,y=Gene_refGene,fill=TUMOR.AF.est))+geom_tile()+
+  scale_fill_gradient2()
+
+
+
+
+
 
