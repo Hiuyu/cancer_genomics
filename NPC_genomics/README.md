@@ -29,9 +29,10 @@ This project can be seperated as the following parts:
 
 3. We also performed an analysis called **OncodriveMUT**, which was implemented in the [**Cancer Genomics Interpreter**]("https://www.cancergenomeinterpreter.org") on the IntoGen server. The **OncodriveMUT** algorithm was recently developed to predict whether a certain single variants was a driver mutation and to prioritize the importance of the mutations. However, no related published paper was found for detailed description of the algorithm. The schema of **OncodriveMUT** provided by the website was as follow:
 	
-	![schema for OncodriveMUT](https://www.cancergenomeinterpreter.org/img/oncodriveMUT_schema.png)
+	![schema for OncodriveMUT](https://github.com/Hiuyu/just_a_bag/blob/master/oncodriveMUT_schema.png?raw=true)
 
 4. As a futher filtering of uninterested gene, we resorted to use RNAseq expression data for 21 NPC tumor samples and 10 inflammation samples. We assumed that if a gene is not expressed (or only litte expression) across tumor and inflammation, it may be less important in the tumorgenesis and therefore less interested in this project. In this step, we filtered genes with the mean **Deseq** estimated expression levels < **50** for both tumor and inflammation samples. (For individual-level expression data, see the `RNAseq_21NPCtumors_10inflam_Deseq_hanbw_cp_20161030.RData`)
+
 	Scripts to prepare these set of genes:
 	```R
 	library(dplyr)
