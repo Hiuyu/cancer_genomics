@@ -57,4 +57,13 @@ This project can be seperated as the following parts:
 ## 5. anymore? 
 e.g. ebv analysis?
 
+## 6. Remarks
+1. Shared RNAseq and DNAseq (WES or WGS) samples
+```R
+id_with_WTS=c("WES01080","WES01108","WES01172","WES01245","WES01293","WES01377","WES01393","WES01414","WES01467","WES01482","WES01533","WGS01540","WGS01550","WGS01551","WGS01649","WES01652","WES01655","WGS01675","WES01681","WES01694","WES01716")
+names(id_with_WTS)=c("1080", "1108", "1172", "1245", "1293", "1377", "1393", "1414", 
+                     "1467", "1482", "1533", "1540", "1550", "1551", "1649", "1652", 
+                     "1655", "1675", "1681", "1694", "1662")
+```
+
 
