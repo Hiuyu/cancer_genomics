@@ -222,7 +222,7 @@ D.all_snv_indel=within(D.all_snv_indel,{
   ALT1=a$NEW.ALT
   strand=rep("+",nrow(D.all_snv_indel))
 })
-D.all_snv_indel_grange = makeGRangesFromDataFrame(D.all_snv_indel,seqnames.field="CHROM",keep.extra.columns=T,starts.in.df.are.0based = TRUE)
+D.all_snv_indel_grange = makeGRangesFromDataFrame(D.all_snv_indel,seqnames.field="CHROM",keep.extra.columns=T,starts.in.df.are.0based = FALSE)
 tmp.rpid=subsetByOverlaps(D.all_snv_indel_grange,rmsk_grange,type="any",ignore.strand=T)
 D.norep_snv_indel_grange=D.all_snv_indel_grange[!D.all_snv_indel_grange$index %in% tmp.rpid$index,]
 
@@ -348,7 +348,20 @@ D.norep.noback.coding_UTR.wes=D.norep.2 %>%
   filter(!Gene_refGene%in%backlist_gene_PMID22294350) %>% 
   filter(!grepl("\\bMUC\\d+",Gene_refGene) ) %>%
   filter(!grepl("\\bOR\\d+",Gene_refGene)) %>%
-  filter(region=="exon+UTR+splicing") %>%
+  filter(Func_refGene%in%c("exonic","splicing","UTR3","UTR5")) %>%
+  filter((share_times>1 & type=="SNV") | (share_times>1 & type=="INDEL")) %>% 
+  filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NF < 0.01) %>% 
+  filter(source=="WES") %>%
+  mutate(REF=REF1,ALT=ALT1) %>%
+  select(-REF1, -ALT1,-POS) %>%
+  arrange(CHROM,start)
+
+## with intron variants
+D.norep.noback.coding_UTR_intron.wes=D.norep.2 %>%
+  filter(!Gene_refGene%in%backlist_gene_PMID22294350) %>% 
+  filter(!grepl("\\bMUC\\d+",Gene_refGene) ) %>%
+  filter(!grepl("\\bOR\\d+",Gene_refGene)) %>%
+  filter(Func_refGene%in%c("exonic","splicing","UTR3","UTR5","intronic")) %>%
   filter((share_times>1 & type=="SNV") | (share_times>1 & type=="INDEL")) %>% 
   filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NF < 0.01) %>% 
   filter(source=="WES") %>%
@@ -385,7 +398,7 @@ tmp.d=D.norep.noback.coding_UTR.wes %>%
                 AAChange.refGene=AAChange_refGene,
                 SAMPLE=SAMPLE
   )
-prefix="wes_updated_SYSUCC_NF"
+prefix="wes_exonic_updated_SYSUCC_NF"
 out_file=paste0(prefix,".txt")
 cat(colnames(tmp.d)[1:11], file=out_file,sep="\t")
 cat("\n",file=out_file,append=TRUE)
@@ -398,26 +411,26 @@ maf_file=paste0(prefix,".maf")
 var.maf=annovarToMaf(annovar = out_file, Center = 'BEI_SYSUCC', refBuild = 'hg19',
                      tsbCol = 'Tumor_Sample_Barcode', table = 'refGene', header = TRUE,MAFobj = FALSE)
 write.table(var.maf,maf_file,sep="\t",col.names = TRUE,row.names = FALSE,quote=FALSE)
-npc=read.maf(maf = maf_file, removeSilent = FALSE, useAll = FALSE)
-tiff("bbb.tif",width=2000,height=1500)
-oncoplot(maf = npc, top = 100,removeNonMutated=FALSE,fontSize = 12)
-dev.off()
-npc.oncodrive=oncodrive(maf=npc,minMut = 5,pvalMethod = "combined")
-plotOncodrive(res = npc.oncodrive, fdrCutOff = 0.05, useFraction = FALSE)
+#npc=read.maf(maf = maf_file, removeSilent = FALSE, useAll = FALSE)
+#tiff("bbb.tif",width=2000,height=1500)
+#oncoplot(maf = npc, top = 100,removeNonMutated=FALSE,fontSize = 12)
+#dev.off()
+#npc.oncodrive=oncodrive(maf=npc,minMut = 5,pvalMethod = "combined")
+#plotOncodrive(res = npc.oncodrive, fdrCutOff = 0.05, useFraction = FALSE)
 
 
 
 
 ## prepare for next step: signature and prognostics
 D.coding_splicing.wes=D.norep.noback.coding_UTR.wes %>% 
-  filter(Func.refGene %in% c("exonic", "splicing")) %>%
+  filter(Func_refGene %in% c("exonic", "splicing")) %>%
   filter(type=="SNV")
-save(D.coding_splicing.wes,file="WES_coding-splicing_2016-10-18.RData")
+save(D.coding_splicing.wes,file="WES_coding-splicing_updated_SYSUCC_2016-10-30.RData")
 
 ## sample-gene mutation matrix
 tmp.g=npc@gene.summary%>%filter(MutatedSamples>10)%>%dplyr::select(Hugo_Symbol)
 tmp.g=tmp.g$Hugo_Symbol
-tmp.d=D.coding_splicing.wes%>%filter(Gene.refGene%in%tmp.g)
+tmp.d=D.coding_splicing.wes%>%filter(Gene_refGene%in%tmp.g)
 gene.mut_mat=dcast(tmp.d,SAMPLE~Gene.refGene, value.var = "type", fun.aggregate = length)
 gene.mut_mat[gene.mut_mat>1]=1
 write.csv(gene.mut_mat,file = "sample_gene_matrix.csv")
@@ -429,12 +442,14 @@ load("npc_norep_nobacklist_shared2_pop0.01_wes_objects_20161028.RData")
 gene.summary = lapply(unique(D.norep_snv_indel_QC$caller),function(x){
   summarize_by_gene_annovar(D.norep_snv_indel_QC %>%
                               filter(caller==x)%>%
-                              filter(ExonicFunc_refGene != "non-exonic" & type=="SNV")
+                              filter(ExonicFunc_refGene != "non-exonic" & type=="SNV") %>% 
+                              filter(ExonicFunc_refGene != "unknown")
   )
 })
 names(gene.summary)=unique(D.norep_snv_indel_QC$caller)
 gene.summary[["shared"]]=summarize_by_gene_annovar(D.norep.noback.coding_UTR.wes %>%
-                                                     filter(ExonicFunc_refGene != "non-exonic" & type=="SNV")
+                                                     filter(ExonicFunc_refGene != "non-exonic" & type=="SNV")  %>% 
+                                                     filter(ExonicFunc_refGene != "unknown")
 )
 tmp.summary=NULL
 tmp.name=names(gene.summary)
@@ -496,7 +511,7 @@ gt <- gtable(widths=unit(rep(1,3), "null"),
              heights=unit(1, "null"))
 gt <- gtable_add_grob(gt, gl, l=1:3,r=1:3,t=1,b=1)
 grid.newpage()
-jpeg("AF comparison_codingSNV.jpeg",width=900,height=600)
+jpeg("AF comparison_all.jpeg",width=900,height=600)
 grid.draw(gt)
 dev.off()
 
@@ -526,7 +541,7 @@ tmp.newAF=c(lm(mutect2~mutect,data=part1)$fitted.values,
 newAF = data.frame(index=rbind(part1,part2,part3,part4)[,1],TUMOR.AF.est=tmp.newAF)
 
 D.norep.noback.coding_UTR.shared.wes.withAF = merge(D.norep.noback.coding_UTR.wes,newAF)
-save(D.norep.noback.coding_UTR.shared.wes.withAF, file="npc_passQC_wes_final_20161029_object.RData")
+save(D.norep.noback.coding_UTR.shared.wes.withAF, file="npc_passQC_wes_updated_SYSUCC_final_20161030_object.RData")
 
 tmp.af=withAF%>%filter(Gene_refGene%in%c("CYLD","TRAF3","TP53","NLRC5","SPATA3"))%>%select(SAMPLE,Gene_refGene,TUMOR.AF.est)
 ggplot(tmp.af,aes(x=SAMPLE,y=Gene_refGene,fill=TUMOR.AF.est))+geom_tile()+
