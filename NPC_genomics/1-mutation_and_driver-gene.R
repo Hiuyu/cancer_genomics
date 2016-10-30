@@ -1,5 +1,4 @@
 library(dplyr)
-library(dtplyr)
 library(reshape2)
 library(ggplot2)
 library(grid)
@@ -548,6 +547,16 @@ ggplot(tmp.af,aes(x=SAMPLE,y=Gene_refGene,fill=TUMOR.AF.est))+geom_tile()+
   scale_fill_gradient2()
 
 
+### plot oncomap.
+load("npc_passQC_wes_final_20161029_object.RData")
+df = D.norep.noback.coding_UTR.shared.wes.withAF %>%
+  filter(Func_refGene %in% c("exonic","splicing")) %>%
+  filter(ExonicFunc_refGene != "unknown") %>%
+  select(sample=SAMPLE, gene=Gene_refGene, mutation=ExonicFunc_refGene, af=TUMOR.AF.est)
+
+jpeg("oncoplot.jpeg",width=1200,height=2000)
+oncoplot(df)
+dev.off()
 
 
 
