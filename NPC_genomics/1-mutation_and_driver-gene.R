@@ -551,13 +551,122 @@ ggplot(tmp.af,aes(x=SAMPLE,y=Gene_refGene,fill=TUMOR.AF.est))+geom_tile()+
 load("npc_passQC_wes_final_20161029_object.RData")
 df = D.norep.noback.coding_UTR.shared.wes.withAF %>%
   filter(Func_refGene %in% c("exonic","splicing")) %>%
-  filter(ExonicFunc_refGene != "unknown") %>%
   select(sample=SAMPLE, gene=Gene_refGene, mutation=ExonicFunc_refGene, af=TUMOR.AF.est)
 
-jpeg("oncoplot.jpeg",width=1200,height=2000)
-oncoplot(df)
+# import mutsigCV results
+mutsig = read.table("wes_exonic_intronic_20161030/wes_exonic_intronic_20161030.sig_genes.txt",
+                    header=TRUE,sep="\t",stringsAsFactors = )
+mutsig$p[mutsig$p == 0] = 1e-16
+mutsig$q[mutsig$q == 0] = 1e-16
+# -log(P)
+mutsig$log_P = round(-log(mutsig$p,base = 10),2)
+mutsig$log_q = round(-log(mutsig$q,base = 10),2)
+
+mutsig_plot = ggplot(head(mutsig,30), aes(x=gene, y=log_q)) +
+  geom_bar(fill="skyblue", stat = "identity") + coord_flip() +
+  scale_y_reverse(expand = c(0,0)) + geom_hline(yintercept = 3, lty=2) +
+  theme(axis.line.y=element_blank()) 
+
+
+jpeg("oncoplot.jpeg",width=1400,height=2000)
+HM <- oncoplot(data=df,gene.annotation.plot = mutsig_plot,
+         included.gene.list = c("TP53","CYLD","TRAF3","NFKBIA","NLRC5"),
+         is.drop.gene=FALSE)
 dev.off()
 
+## only several genes
+top30 = as.character(head(mutsig$gene,30))
+oncoplot(data=df,gene.annotation.plot = mutsig_plot,
+         included.gene.list = top30,
+         is.drop.gene=FALSE,is.sort.gene = FALSE)
 
 
+interested = c("TP53","CYLD","TRAF3","NFKBIA","NLRC5","RPL22","PRH2")
+HM <- oncoplot(data=df,gene.annotation.plot = mutsig_plot,
+         included.gene.list = interested,
+         is.drop.gene=FALSE,is.sort.gene = FALSE)
 
+oncoplot(data=df,gene.annotation.plot = mutsig_plot,
+         included.gene.list = interested,
+         included.sample.list = HM$sample_order,
+         is.drop.gene=FALSE,is.sort.gene = FALSE,is.sort.sample=FALSE)
+
+
+ggplot(onco, aes(x=sample,y=gene,fill=mutation)) + 
+  geom_tile(width=1,height=1,colour="grey70") + 
+  scale_fill_gradientn(colours=rainbow(4),na.value = "white") + 
+  geom_text(aes(label=round(mutation,2)),angle=90) +
+  xlab("") + ylab("") +
+  theme(axis.text.x=element_text(angle=90,vjust=0.5,size=10),axis.text.y=element_text(size=11))
+  
+
+
+### loading expression data
+load("RNAseq_21NPCtumors_10inflam_Deseq_hanbw_cp_20161030.RData")
+id_with_WTS=c("WES01080","WES01108","WES01172","WES01245","WES01293","WES01377","WES01393","WES01414","WES01467","WES01482","WES01533","WGS01540","WGS01550","WGS01551","WGS01649","WES01652","WES01655","WGS01675","WES01681","WES01694","WES01716")
+names(id_with_WTS)=c("1080", "1108", "1172", "1245", "1293", "1377", "1393", "1414", 
+                     "1467", "1482", "1533", "1540", "1550", "1551", "1649", "1652", 
+                     "1655", "1675", "1681", "1694", "1662")
+tmp.c = colnames(RNAseq.expr.deseq.tumor)
+tmp.c = gsub("WTS_(\\d+)_UN","\\1",tmp.c)
+colnames(RNAseq.expr.deseq.tumor) = id_with_WTS[tmp.c]
+tmp.expr = cbind(RNAseq.expr.deseq.tumor[interested,],
+                 RNAseq.expr.deseq.inflatmmation[interested,]
+)
+tmp.expr$gene = rownames(tmp.expr)
+tmp.expr.df = melt(tmp.expr, variable.name = "sample", value.name = "expr")
+# assign group
+tmp.expr.df$group = "control"
+tmp.expr.df$group[tmp.expr.df$sample %in% id_with_WTS] = "tumor"
+tmp.expr.df$group = factor(tmp.expr.df$group,levels=c("tumor","control"))
+ggplot(tmp.expr.df,aes(x=group,y=expr)) + 
+  geom_boxplot(aes(fill=group)) + 
+  geom_jitter() + 
+  facet_wrap(~gene) +
+  xlab("") + theme_bw() + theme(strip.text.x=element_text(size=12,face="bold"), 
+                     axis.text.x=element_blank())
+
+# mutation or not
+tmp.mt = D.norep.noback.coding_UTR.shared.wes.withAF %>% 
+  filter(Gene_refGene %in% interested) %>%
+  filter(SAMPLE %in% id_with_WTS) %>%
+  select(sample=SAMPLE,gene=Gene_refGene)
+tmp.mt = as.data.frame(with(tmp.mt,table(sample,gene)))
+tmp.mt$Freq[tmp.mt$Freq>1]=1
+tmp.mt = tmp.mt %>%filter(Freq>0)
+
+tmp.expr.df.tumor = tmp.expr.df %>% filter(group=="tumor") %>%
+  arrange(sample,gene)
+tmp.expr.df.tumor$mutation = 0
+tmp.expr.df.tumor$mutation[tmp.expr.df.tumor$sample %in% tmp.mt$sample &
+                             tmp.expr.df.tumor$gene %in% tmp.mt$gene] = 1
+tmp.expr.df.tumor = within(tmp.expr.df.tumor,{
+  mutation = factor(mutation,levels = c(0,1),labels = c("wildtype","mutation"))
+})
+ggplot(tmp.expr.df.tumor,aes(x=mutation,y=expr)) + 
+  geom_boxplot(aes(fill=mutation)) + 
+  geom_jitter() + 
+  facet_wrap(~gene) +
+  xlab("") + theme_bw() + theme(strip.text.x=element_text(size=12,face="bold"), 
+                                axis.text.x=element_blank())
+
+# dn/ds plot plus gene expression
+gene_summary = summarize_by_gene_annovar(D.norep.noback.coding_UTR.shared.wes.withAF %>%
+                            filter(ExonicFunc_refGene != "non-exonic" & type=="SNV")  %>% 
+                            filter(ExonicFunc_refGene != "unknown")
+)
+tmp.d=gene_summary%>%mutate(sample_frac=n_sample/474, dn_ds=(n_nonsense+n_missense)/n_silent)
+tmp.max=max(tmp.d$dn_ds[!(tmp.d$dn_ds==Inf | is.nan(tmp.d$dn_ds))])
+tmp.d$dn_ds[tmp.d$dn_ds==Inf]=tmp.max+5
+tmp.d=tmp.d%>%filter(!is.nan(dn_ds)) %>%
+  select(gene=Gene_refGene, sample_frac, dn_ds)
+
+mean.RNAseq.expr.deseq.tumor$gene=rownames(mean.RNAseq.expr.deseq.tumor)
+tmp.e = mean.RNAseq.expr.deseq.tumor %>% select(gene,median)
+
+tmp.d = tmp.d %>% filter(gene %in% tmp.e$gene)
+tmp.e = tmp.e %>% filter(gene %in% tmp.d$gene)
+tmp.c = merge(tmp.d,tmp.e)
+
+library(plotly)
+p <- plot_ly(tmp.c, x = ~log(dn_ds,2), y = ~sample_frac, z = ~log(median,10)) %>% add_markers()
