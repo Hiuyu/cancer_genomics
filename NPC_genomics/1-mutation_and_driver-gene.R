@@ -4,7 +4,7 @@ library(ggplot2)
 library(grid)
 library(gtable)
 library(gridExtra)
-library(VennDiagram)
+#library(VennDiagram)
 library(GenomicRanges)
 # in windows
 #setwd("C:/Users/LibJu/workspace/myData/NPC/cancer_genomics/caller_comparison")
@@ -18,7 +18,7 @@ source("/data/home/zuoxy/data/NPC/somatic/20160519_863closing/11-oncomap_analysi
 message("start")
 mutect2<-as.data.frame(data.table::fread("mutect2_pass_annotate.tsv"))
 mutect<-as.data.frame(data.table::fread("mutect_pass_annotate.tsv"))
-varscan<-as.data.frame(data.table::fread("varscan2_pass_annotate.tsv"))
+varscan2<-as.data.frame(data.table::fread("varscan2_pass_annotate.tsv"))
 ## get the population frequency colnames
 pop.freq.col=colnames(mutect2)[sapply(colnames(mutect2),function(x){
   grepl("ExAC",x)|grepl("1000g",x)|grepl("CANCER_FREE_[AN]F",x)
@@ -27,7 +27,7 @@ pop.freq.col=colnames(mutect2)[sapply(colnames(mutect2),function(x){
 # if no annotation for the Func_refGene and Gene_refGene, remove the variant
 mutect2 = mutect2 %>% filter(Func_refGene != "." & Gene_refGene != ".")
 mutect = mutect %>% filter(Func_refGene != "." & Gene_refGene != ".")
-varscan = varscan2 %>% filter(Func_refGene != "." & Gene_refGene != ".")
+varscan2 = varscan2 %>% filter(Func_refGene != "." & Gene_refGene != ".")
 
 print("removing ambigious annotation")
 amb=with(mutect2, wrapper_remove_ambigious_find_nearest(Gene_refGene,Func_refGene,ExonicFunc_refGene,GeneDetail_refGene,sep1="\\\\x3b",sep2="\\\\x3d"))
@@ -48,9 +48,9 @@ mutect=within(mutect,{
   ExonicFunc_refGene=amb$func_exonic
   GeneDetail_refGene=amb$dist
 })
-varscan$ExonicFunc_refGene=gsub("\\s+","_",varscan$ExonicFunc_refGene)
-amb=with(varscan, wrapper_remove_ambigious_find_nearest(Gene_refGene,Func_refGene,ExonicFunc_refGene,GeneDetail_refGene,sep1=";",sep2="="))
-varscan1=within(varscan,{
+varscan2$ExonicFunc_refGene=gsub("\\s+","_",varscan2$ExonicFunc_refGene)
+amb=with(varscan2, wrapper_remove_ambigious_find_nearest(Gene_refGene,Func_refGene,ExonicFunc_refGene,GeneDetail_refGene,sep1=";",sep2="="))
+varscan2=within(varscan2,{
   source=decide_source(SAMPLE)
   type=decide_variant_type(REF,ALT)
   Gene_refGene=amb$gene
@@ -58,12 +58,16 @@ varscan1=within(varscan,{
   ExonicFunc_refGene=amb$func_exonic
   GeneDetail_refGene=amb$dist
 })
+## if for HK and SG, the source field was set as follows:
+# > mutect$source=gsub("^(\\w+)_.+","\\1",mutect$SAMPLE)
+# > mutect2$source=gsub("^(\\w+)_.+","\\1",mutect2$SAMPLE)
+# > varscan2$source=gsub("^(\\w+)_.+","\\1",varscan2$SAMPLE)
 save.image("raw_all_input_3caller_3callers.RData")
 ####### part 1 WES SNV comparison #####
 # remove some discordant columns to make them "rbind"-able
 D.mt2=mutect2%>%select(everything(),-TUMOR.FA,-NORMAL.FA)
 D.mt=mutect%>%select(everything(),-TUMOR.FA,-NORMAL.FA)
-D.vs=varscan%>%select(everything(),POS=Start,-End)
+D.vs=varscan2%>%select(everything(),POS=Start,-End)
 
 # total number of SNV count
 print(paste("ALL variant count for mutect2, mutect, varscan is ",nrow(D.mt2), nrow(D.mt), nrow(D.vs)))
