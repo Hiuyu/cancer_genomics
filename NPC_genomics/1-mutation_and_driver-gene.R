@@ -553,9 +553,9 @@ ggplot(tmp.af,aes(x=SAMPLE,y=Gene_refGene,fill=TUMOR.AF.est))+geom_tile()+
 
 ### plot oncomap.
 load("npc_passQC_wes_final_20161029_object.RData")
-df = D.norep.noback.coding_UTR.shared.wes.withAF %>%
+df = D.norep.noback.coding_UTR_intron.wes_wgs_HKSG.combined %>%
   filter(Func_refGene %in% c("exonic","splicing")) %>%
-  select(sample=SAMPLE, gene=Gene_refGene, mutation=ExonicFunc_refGene, af=TUMOR.AF.est)
+  select(sample=SAMPLE, gene=Gene_refGene, mutation=ExonicFunc_refGene,source=source)
 
 # import mutsigCV results
 mutsig = read.table("wes_exonic_intronic_20161030/wes_exonic_intronic_20161030.sig_genes.txt",
@@ -584,19 +584,32 @@ oncoplot(data=df,gene.annotation.plot = mutsig_plot,
          included.gene.list = top30,
          is.drop.gene=FALSE,is.sort.gene = FALSE)
 
+annot.table = unique(df %>% select(sample,source))
 
 interested = c("TP53","CYLD","TRAF3","NFKBIA","NLRC5","RPL22","PRH2")
-HM <- oncoplot(data=df,gene.annotation.plot = mutsig_plot,
-         included.gene.list = interested,
-         is.drop.gene=FALSE,is.sort.gene = FALSE)
+HM <- oncoplot(data=df, gene.annotation.plot = mutsig_plot,
+               sample.annotation.table = annot.table,
+               included.gene.list = interested,
+               is.drop.gene=FALSE,is.sort.gene = FALSE)
 
-oncoplot(data=df,gene.annotation.plot = mutsig_plot,
-         included.gene.list = interested,
-         included.sample.list = HM$sample_order,
+# testing  start
+test.df = D.norep.noback.coding_UTR_intron.wes_wgs_HKSG.combined %>%
+  filter(Gene_refGene %in% interested) %>%
+  select(sample=SAMPLE, gene=Gene_refGene, mutation=ExonicFunc_refGene)
+
+sample_list=unique(test.df$sample)
+test.annot.df = cbind(sample_list,
+                      sample(c("T1","T2","T3"),length(sample_list),replace = T),
+                      sample(c("WES","WGS","HK","SG"),length(sample_list),replace = T)
+                      )
+colnames(test.annot.df) = c("sample","TMN","source")
+source("~/Documents/workspace/Github_sync_reposority/omics_scripts/oncoplot/oncoplot_heatmap.R")
+oncoplot(data=test.df,gene.annotation.plot = mutsig_plot,
+         sample.annotation.table = test.annot.df,
          is.drop.gene=FALSE,is.sort.gene = FALSE,is.sort.sample=FALSE)
+### testing over
 
-
-ggplot(onco, aes(x=sample,y=gene,fill=mutation)) + 
+nnggplot(onco, aes(x=sample,y=gene,fill=mutation)) + 
   geom_tile(width=1,height=1,colour="grey70") + 
   scale_fill_gradientn(colours=rainbow(4),na.value = "white") + 
   geom_text(aes(label=round(mutation,2)),angle=90) +
@@ -672,5 +685,3 @@ tmp.d = tmp.d %>% filter(gene %in% tmp.e$gene)
 tmp.e = tmp.e %>% filter(gene %in% tmp.d$gene)
 tmp.c = merge(tmp.d,tmp.e)
 
-library(plotly)
-p <- plot_ly(tmp.c, x = ~log(dn_ds,2), y = ~sample_frac, z = ~log(median,10)) %>% add_markers()
