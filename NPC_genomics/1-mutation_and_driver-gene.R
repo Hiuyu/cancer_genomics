@@ -559,7 +559,7 @@ df = D.norep.noback.coding_UTR_intron.wes_wgs_HKSG.combined %>%
 
 # import mutsigCV results
 mutsig = read.table("wes_exonic_intronic_20161030/wes_exonic_intronic_20161030.sig_genes.txt",
-                    header=TRUE,sep="\t",stringsAsFactors = )
+                    header=TRUE,sep="\t",stringsAsFactors = F)
 mutsig$p[mutsig$p == 0] = 1e-16
 mutsig$q[mutsig$q == 0] = 1e-16
 # -log(P)
@@ -609,7 +609,7 @@ oncoplot(data=test.df,gene.annotation.plot = mutsig_plot,
          is.drop.gene=FALSE,is.sort.gene = FALSE,is.sort.sample=FALSE)
 ### testing over
 
-nnggplot(onco, aes(x=sample,y=gene,fill=mutation)) + 
+ggplot(onco, aes(x=sample,y=gene,fill=mutation)) + 
   geom_tile(width=1,height=1,colour="grey70") + 
   scale_fill_gradientn(colours=rainbow(4),na.value = "white") + 
   geom_text(aes(label=round(mutation,2)),angle=90) +
@@ -620,10 +620,14 @@ nnggplot(onco, aes(x=sample,y=gene,fill=mutation)) +
 
 ### loading expression data
 load("RNAseq_21NPCtumors_10inflam_Deseq_hanbw_cp_20161030.RData")
-id_with_WTS=c("WES01080","WES01108","WES01172","WES01245","WES01293","WES01377","WES01393","WES01414","WES01467","WES01482","WES01533","WGS01540","WGS01550","WGS01551","WGS01649","WES01652","WES01655","WGS01675","WES01681","WES01694","WES01716")
+id_with_WTS=c("WES01080","WES01108","WES01172","WES01245","WES01293","WES01377","WES01393","WES01414",
+              "WES01467","WES01482","WES01533","WGS01540","WGS01550","WGS01551","WGS01649","WES01652",
+              "WES01655","WGS01675","WES01681","WES01694","WES01716","WES01641","WES01476","WES01111",
+              "WES00952","WES01020")
 names(id_with_WTS)=c("1080", "1108", "1172", "1245", "1293", "1377", "1393", "1414", 
                      "1467", "1482", "1533", "1540", "1550", "1551", "1649", "1652", 
-                     "1655", "1675", "1681", "1694", "1662")
+                     "1655", "1675", "1681", "1694", "1662", "1641", "1476", "1111",
+                     "952" , "1020")
 tmp.c = colnames(RNAseq.expr.deseq.tumor)
 tmp.c = gsub("WTS_(\\d+)_UN","\\1",tmp.c)
 colnames(RNAseq.expr.deseq.tumor) = id_with_WTS[tmp.c]
@@ -684,4 +688,6 @@ tmp.e = mean.RNAseq.expr.deseq.tumor %>% select(gene,median)
 tmp.d = tmp.d %>% filter(gene %in% tmp.e$gene)
 tmp.e = tmp.e %>% filter(gene %in% tmp.d$gene)
 tmp.c = merge(tmp.d,tmp.e)
+
+
 
