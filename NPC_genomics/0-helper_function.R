@@ -231,8 +231,37 @@ decide_1base_mutation_type<-function(REF,ALT){
   return(mutation_type)
 }
 
-
-
+## parse AAchange column from ANNOVAR format data, to get the AA
+retrive_AA_change_annovar<-function(AA_change, isoform_name,sep=","){
+  .FUN<-function(Q){
+    if(Q==".") return(".")
+    Q_list=unlist(strsplit(Q,sep))
+    Q_list_2=lapply(Q_list,strsplit,":")
+    Q_matrix=do.call(rbind,do.call(c,Q_list_2))
+    idx=Q_matrix[,2]==isoform_name
+    if(sum(idx)==1){
+      Q_matrix[idx,5]
+    }else if(sum(idx)==0){
+      NA
+    }else{
+      z=unique(Q_matrix[idx,5])
+      if(length(z)==1){
+        z
+      }else{
+        paste0(z,collapse="||")
+      }
+    }
+  }
+  AA_change_list=lapply(AA_change,.FUN)
+  output=lapply(AA_change_list,function(x){
+    if(is.na(x)) return(rep(".",4))
+    pos=gsub("p\\.([^\\d]*)(\\d+)([^\\d]*)","\\2",x,perl=TRUE)
+    from=gsub("p\\.([^\\d]*)(\\d+)([^\\d]*)","\\1",x,perl=TRUE)
+    to=gsub("p\\.([^\\d]*)(\\d+)([^\\d]*)","\\3",x,perl=TRUE)
+    c(pos,from,to, x)
+  })
+  do.call(rbind,output)
+}
 
 
 

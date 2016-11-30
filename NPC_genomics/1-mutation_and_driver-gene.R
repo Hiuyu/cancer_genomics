@@ -8,6 +8,7 @@ library(gridExtra)
 library(GenomicRanges)
 # in windows
 #setwd("C:/Users/LibJu/workspace/myData/NPC/cancer_genomics/caller_comparison")
+# setwd("C:/Users/LibJu/workspace/myData/P1-NPC/cancer_genomics/1-somatic_mutation/temp/")
 #source("C:/Users/LibJu/workspace/Github-project_scripts-repository/cancer_genomics/NPC_genomics/0-helper_function.R")
 # in cluster
 source("/data/home/zuoxy/data/NPC/somatic/20160519_863closing/11-oncomap_analysis_workspace/scripts_npc_project_also_in_github/cancer_genomics/NPC_genomics/0-helper_function.R")
@@ -619,7 +620,7 @@ ggplot(onco, aes(x=sample,y=gene,fill=mutation)) +
 
 
 ### loading expression data
-load("RNAseq_21NPCtumors_10inflam_Deseq_hanbw_cp_20161030.RData")
+load("../../3-RNA-seq/expression_Hanbw/RNAseq_21NPCtumors_10inflam_Deseq_hanbw_cp_20161129.RData")
 id_with_WTS=c("WES01080","WES01108","WES01172","WES01245","WES01293","WES01377","WES01393","WES01414",
               "WES01467","WES01482","WES01533","WGS01540","WGS01550","WGS01551","WGS01649","WES01652",
               "WES01655","WGS01675","WES01681","WES01694","WES01716","WES01641","WES01476","WES01111",
@@ -628,21 +629,29 @@ names(id_with_WTS)=c("1080", "1108", "1172", "1245", "1293", "1377", "1393", "14
                      "1467", "1482", "1533", "1540", "1550", "1551", "1649", "1652", 
                      "1655", "1675", "1681", "1694", "1662", "1641", "1476", "1111",
                      "952" , "1020")
+ interested=c("TP53", "CYLD", "TRAF3", "NFKBIA", "NLRC5", "RPL22", "PRH2","TGFBR2","TET2")
 tmp.c = colnames(RNAseq.expr.deseq.tumor)
 tmp.c = gsub("WTS_(\\d+)_UN","\\1",tmp.c)
 colnames(RNAseq.expr.deseq.tumor) = id_with_WTS[tmp.c]
-tmp.expr = cbind(RNAseq.expr.deseq.tumor[interested,],
+tmp.expr = as.data.frame(cbind(RNAseq.expr.deseq.tumor[interested,],
                  RNAseq.expr.deseq.inflatmmation[interested,]
-)
+))
 tmp.expr$gene = rownames(tmp.expr)
 tmp.expr.df = melt(tmp.expr, variable.name = "sample", value.name = "expr")
 # assign group
 tmp.expr.df$group = "control"
 tmp.expr.df$group[tmp.expr.df$sample %in% id_with_WTS] = "tumor"
 tmp.expr.df$group = factor(tmp.expr.df$group,levels=c("tumor","control"))
+pval=as.numeric(sapply(interested,function(x){
+  try(with(tmp.expr.df %>% filter(gene==x),
+           wilcox.test(expr~group))$p.value,silent = T)
+}))
+names(pval)=interested
+tmp.expr.df$pval=sprintf("%.2e",pval[tmp.expr.df$gene])
 ggplot(tmp.expr.df,aes(x=group,y=expr)) + 
   geom_boxplot(aes(fill=group)) + 
-  geom_jitter() + 
+  geom_jitter() +
+  geom_text(x=2,y=20000, aes(label=paste0("P=",pval)) ) +
   facet_wrap(~gene) +
   xlab("") + theme_bw() + theme(strip.text.x=element_text(size=12,face="bold"), 
                      axis.text.x=element_blank())
@@ -655,21 +664,31 @@ tmp.mt = D.norep.noback.coding_UTR.shared.wes.withAF %>%
 tmp.mt = as.data.frame(with(tmp.mt,table(sample,gene)))
 tmp.mt$Freq[tmp.mt$Freq>1]=1
 tmp.mt = tmp.mt %>%filter(Freq>0)
-
+pval=as.numeric(sapply(interested,function(x){
+  try(with(tmp.expr.df.tumor %>% filter(gene==x),
+           wilcox.test(expr~mutation))$p.value,silent = T)
+  }))
+names(pval)=interested
 tmp.expr.df.tumor = tmp.expr.df %>% filter(group=="tumor") %>%
   arrange(sample,gene)
 tmp.expr.df.tumor$mutation = 0
-tmp.expr.df.tumor$mutation[tmp.expr.df.tumor$sample %in% tmp.mt$sample &
-                             tmp.expr.df.tumor$gene %in% tmp.mt$gene] = 1
+for(i in 1:nrow(tmp.mt)){
+  tmp.expr.df.tumor$mutation[tmp.expr.df.tumor$sample %in% tmp.mt$sample[i] &
+                             tmp.expr.df.tumor$gene %in% tmp.mt$gene[i]] = 1
+}
 tmp.expr.df.tumor = within(tmp.expr.df.tumor,{
   mutation = factor(mutation,levels = c(0,1),labels = c("wildtype","mutation"))
 })
+tmp.expr.df.tumor$pval=round(pval[tmp.expr.df.tumor$gene],3)
 ggplot(tmp.expr.df.tumor,aes(x=mutation,y=expr)) + 
   geom_boxplot(aes(fill=mutation)) + 
   geom_jitter() + 
+  geom_text(x=2,y=20000, aes(label=paste0("P=",pval)) ) +
   facet_wrap(~gene) +
   xlab("") + theme_bw() + theme(strip.text.x=element_text(size=12,face="bold"), 
                                 axis.text.x=element_blank())
+
+
 
 # dn/ds plot plus gene expression
 gene_summary = summarize_by_gene_annovar(D.norep.noback.coding_UTR.shared.wes.withAF %>%
