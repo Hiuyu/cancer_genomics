@@ -135,7 +135,7 @@ wrapper_remove_ambigious_find_nearest<-function(gene, func_gene, func_exonic, ge
   ## select most 'powerful' annotation for multi-hit gene
   amb=remove_ambigious(gene,func_gene,func_exonic,sep1)
   ## select nearest gene for intergenic
-  amb1=find_nearest_gene(gene,gene_detail,sep1, sep2)
+  amb1=find_nearest_gene(amb$gene,gene_detail,sep1, sep2)
   amb$gene=amb1$gene
   amb$dist=amb1$dist
   return(amb)
