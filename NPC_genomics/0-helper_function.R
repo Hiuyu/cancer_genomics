@@ -84,7 +84,7 @@ parse_GATK_AD_field<-function(AD){
   }else if(typeof(AD)=="list"){
     AD=as.chracter(AD)
   }
-  AD[is.na(AD)]="0,0" # recode NA to 0,0, means not covered
+  AD[is.na(AD)]="0,0" # recode NA to 0,0, means not covered or no data
   n=length(AD)
   ad=numeric(n)
   dp=numeric(n)
@@ -178,6 +178,19 @@ convert_0base_to_1base<-function(POS,REF,ALT){
   END[len.ref>1]=END[len.ref>1]-1
   return(data.frame(START=START,END=END,NEW.REF=new.REF,NEW.ALT=new.ALT,stringsAsFactors = F))
 }
+
+##### split genes and repeat rows by make each line a variant for a gene for a sample
+## input the whole data.frame, require the Gene_refGene field, and only "," was used for multiple genes.
+## return a data.frame with splitted genes, and add a field to represent whether this variant was in a overlapped gene region
+split_genes<-function(DATA,sep=","){
+  x1=strsplit(DATA$Gene_refGene,sep)
+  n.times=sapply(x1,length)
+  DATA1 = DATA[rep(1:length(n.times),n.times),]
+  DATA1$Gene_refGene = unlist(x1)
+  return(DATA1)
+}
+
+
 
 
 #####  get the context and mutation type from reference genome ######

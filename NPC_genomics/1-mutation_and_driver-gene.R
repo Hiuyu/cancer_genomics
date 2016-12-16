@@ -115,6 +115,9 @@ D.all_snv_indel=within(D.all_snv_indel,{ExonicFunc_refGene[ExonicFunc_refGene ==
 #ggplot(tmp.df, aes(x=caller,y=value,fill=ExonicFunc_refGene))+geom_bar(stat="identity",position="stack")+ylab("frequency") +
 #  ggtitle("only Exonic variants") +facet_grid(type+region~source)
 
+# split gene fields and replicate rows
+D.all_snv_indel = split_genes(D.all_snv_indel, ",")
+
 ## saving objects
 output_file="ALL_SNV_INDEL_3callers_updated_in-house-data_20161028.RData"
 save(D.all_snv_indel,file=output_file)
@@ -333,58 +336,71 @@ load("backlist_gene_PMID22294350_TableS7.RData")
 #                  columns="ENTREZID")
 
 
-
 ### combine all filtering steps
 # single method pass QC
-D.norep_snv_indel_wgs_QC=D.norep_snv_indel %>%
+D.norep_snv_indel_QC=D.norep_snv_indel %>%
   filter(!Gene_refGene%in%backlist_gene_PMID22294350) %>% 
+  filter(!Gene_refGene%in%hgnc_pseudogene_20161208)%>%
   filter(!grepl("\\bMUC\\d+",Gene_refGene) ) %>%
   filter(!grepl("\\bOR\\d+",Gene_refGene)) %>%
-  filter(region=="exon+UTR+splicing") %>%
   filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NF < 0.01) %>% 
-  filter(source=="WGS") %>%
-  mutate(REF=REF1,ALT=ALT1) %>%
-  select(-REF1, -ALT1,-POS) %>%
-  arrange(CHROM,start)
-
-# pass QC and shared variants
-D.norep.noback.coding_UTR.wgs=D.norep.2 %>%
-  filter(!Gene_refGene%in%backlist_gene_PMID22294350) %>% 
-  filter(!grepl("\\bMUC\\d+",Gene_refGene) ) %>%
-  filter(!grepl("\\bOR\\d+",Gene_refGene)) %>%
-  filter(Func_refGene%in%c("exonic","splicing","UTR3","UTR5")) %>%
-  filter((share_times>1 & type=="SNV") | (share_times>1 & type=="INDEL")) %>% 
-  filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NF < 0.01) %>% 
-  filter(source=="WGS") %>%
   mutate(REF=REF1,ALT=ALT1) %>%
   select(-REF1, -ALT1,-POS) %>%
   arrange(CHROM,start)
 
 ## with intron variants
-D.norep.noback.coding_UTR_intron.wgs=D.norep.2 %>%
+D.norep.noback.coding_UTR_intron=D.norep.2 %>%
   filter(!Gene_refGene%in%backlist_gene_PMID22294350) %>% 
+  filter(!Gene_refGene%in%hgnc_pseudogene_20161208)%>%
   filter(!grepl("\\bMUC\\d+",Gene_refGene) ) %>%
   filter(!grepl("\\bOR\\d+",Gene_refGene)) %>%
   filter(Func_refGene%in%c("exonic","splicing","UTR3","UTR5","intronic")) %>%
-  filter((share_times>1 & type=="SNV") | (share_times>1 & type=="INDEL")) %>% 
   filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NF < 0.01) %>% 
-  filter(source=="WGS") %>%
+  mutate(REF=REF1,ALT=ALT1) %>%
+  select(-REF1, -ALT1,-POS) %>%
+  arrange(CHROM,start) %>%
+  filter((share_times>1 & type=="SNV") | (share_times>1 & type=="INDEL")) 
+
+## keep only called by 1 caller, but with high read depth and mutated allele depth (or MAF)
+tmp.t = parse_GATK_AD_field(D.norep_snv_indel_QC$TUMOR.AD)
+tmp.n = parse_GATK_AD_field(D.norep_snv_indel_QC$NORMAL.AD)
+D.norep_snv_indel_QC = D.norep_snv_indel_QC %>% 
+  mutate(TUMOR.DP = tmp.t$DP,
+         TUMOR.AF = tmp.t$AF,
+         TUMOR.AD = tmp.t$AD,
+         NORMAL.DP = tmp.n$DP,
+         NORMAL.AF = tmp.n$AF,
+         NORMAL.AD = tmp.n$AD
+         )
+index.1caller = D.norep.2 %>%
+  filter(share_times == 1) %>% select(index)
+D.1caller_high_coverage = D.norep_snv_indel_QC %>%
+  filter(index %in% index.1caller[,1]) %>%
+  filter(TUMOR.DP >=20 & TUMOR.AF >= 0.03 & TUMOR.AD >= 5) %>%
+  filter(NORMAL.DP >= 10 & NORMAL.AF < 0.03) %>%
+  filter(Func_refGene%in%c("exonic","splicing","UTR3","UTR5","intronic"))
+
+D.1caller_high_coverage_coding_UTR_intron = D.norep.2 %>% 
+  filter(index %in% D.1caller_high_coverage$index) %>%
   mutate(REF=REF1,ALT=ALT1) %>%
   select(-REF1, -ALT1,-POS) %>%
   arrange(CHROM,start)
 
+D.rescure=rbind(D.norep.noback.coding_UTR_intron,
+                D.1caller_high_coverage_coding_UTR_intron) %>% 
+  arrange(CHROM,start)
+
 # melt form of data, with mutation AF
-D.norep.noback.coding_UTR.wgs.withAD = D.norep_snv_indel %>%
-  filter(index %in% D.norep.noback.coding_UTR.wgs$index)
+D.norep.noback.coding_UTR_intron.withAD = D.norep_snv_indel_QC %>%
+  filter(index %in% D.norep.noback.coding_UTR_intron$index)
 
 # save all objects in QC steps
 save(D.all_snv_indel, # raw variants for WGS and WES, SNV and INDEL, before any filtering
-     D.norep_snv_indel, # raw variants + repeatmasker filtering
-     D.norep_snv_indel_wgs_QC, # raw varaints + repeatmasker + blacklist gene + exon_UTR + germline filtering
-     D.norep.noback.coding_UTR.wgs.withAD, # filtered variants + shared by 2 callers
-     D.norep.noback.coding_UTR.wgs, # another form of shared variants past QC
+     D.norep.noback.coding_UTR_intron.withAD, # filtered variants + shared by 2 callers
+     D.norep.noback.coding_UTR_intron, # another form of shared variants past QC
      file="npc_norep_nobacklist_shared2_pop0.01_wgs_objects_20161028.RData"
 )
+
 
 ##### tricks: convert annovar output to MAF. 
 ## require maftools packages, which is not available on cluster
