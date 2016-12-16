@@ -376,8 +376,8 @@ index.1caller = D.norep.2 %>%
   filter(share_times == 1) %>% select(index)
 D.1caller_high_coverage = D.norep_snv_indel_QC %>%
   filter(index %in% index.1caller[,1]) %>%
-  filter(TUMOR.DP >=20 & TUMOR.AF >= 0.03 & TUMOR.AD >= 5) %>%
-  filter(NORMAL.DP >= 10 & NORMAL.AF < 0.03) %>%
+  filter(TUMOR.DP >=30 & TUMOR.AF >= 0.1) %>%
+  filter(NORMAL.DP >= 20 & NORMAL.AF < 0.03) %>%
   filter(Func_refGene%in%c("exonic","splicing","UTR3","UTR5","intronic"))
 
 D.1caller_high_coverage_coding_UTR_intron = D.norep.2 %>% 
