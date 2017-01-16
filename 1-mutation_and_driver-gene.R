@@ -8,7 +8,6 @@ library(gridExtra)
 library(GenomicRanges)
 # in windows
 #setwd("C:/Users/LibJu/workspace/myData/NPC/cancer_genomics/caller_comparison")
-# setwd("C:/Users/LibJu/workspace/myData/P1-NPC/cancer_genomics/1-somatic_mutation/temp/")
 #source("C:/Users/LibJu/workspace/Github-project_scripts-repository/cancer_genomics/NPC_genomics/0-helper_function.R")
 # in cluster
 source("/data/home/zuoxy/data/NPC/somatic/20160519_863closing/11-oncomap_analysis_workspace/scripts_npc_project_also_in_github/cancer_genomics/NPC_genomics/0-helper_function.R")
@@ -114,9 +113,6 @@ D.all_snv_indel=within(D.all_snv_indel,{ExonicFunc_refGene[ExonicFunc_refGene ==
 #tmp.df=melt(tmp.df)
 #ggplot(tmp.df, aes(x=caller,y=value,fill=ExonicFunc_refGene))+geom_bar(stat="identity",position="stack")+ylab("frequency") +
 #  ggtitle("only Exonic variants") +facet_grid(type+region~source)
-
-# split gene fields and replicate rows
-D.all_snv_indel = split_genes(D.all_snv_indel, ",")
 
 ## saving objects
 output_file="ALL_SNV_INDEL_3callers_updated_in-house-data_20161028.RData"
@@ -336,71 +332,58 @@ load("backlist_gene_PMID22294350_TableS7.RData")
 #                  columns="ENTREZID")
 
 
+
 ### combine all filtering steps
 # single method pass QC
-D.norep_snv_indel_QC=D.norep_snv_indel %>%
+D.norep_snv_indel_wgs_QC=D.norep_snv_indel %>%
   filter(!Gene_refGene%in%backlist_gene_PMID22294350) %>% 
-  filter(!Gene_refGene%in%hgnc_pseudogene_20161208)%>%
   filter(!grepl("\\bMUC\\d+",Gene_refGene) ) %>%
   filter(!grepl("\\bOR\\d+",Gene_refGene)) %>%
+  filter(region=="exon+UTR+splicing") %>%
   filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NF < 0.01) %>% 
+  filter(source=="WGS") %>%
+  mutate(REF=REF1,ALT=ALT1) %>%
+  select(-REF1, -ALT1,-POS) %>%
+  arrange(CHROM,start)
+
+# pass QC and shared variants
+D.norep.noback.coding_UTR.wgs=D.norep.2 %>%
+  filter(!Gene_refGene%in%backlist_gene_PMID22294350) %>% 
+  filter(!grepl("\\bMUC\\d+",Gene_refGene) ) %>%
+  filter(!grepl("\\bOR\\d+",Gene_refGene)) %>%
+  filter(Func_refGene%in%c("exonic","splicing","UTR3","UTR5")) %>%
+  filter((share_times>1 & type=="SNV") | (share_times>1 & type=="INDEL")) %>% 
+  filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NF < 0.01) %>% 
+  filter(source=="WGS") %>%
   mutate(REF=REF1,ALT=ALT1) %>%
   select(-REF1, -ALT1,-POS) %>%
   arrange(CHROM,start)
 
 ## with intron variants
-D.norep.noback.coding_UTR_intron=D.norep.2 %>%
+D.norep.noback.coding_UTR_intron.wgs=D.norep.2 %>%
   filter(!Gene_refGene%in%backlist_gene_PMID22294350) %>% 
-  filter(!Gene_refGene%in%hgnc_pseudogene_20161208)%>%
   filter(!grepl("\\bMUC\\d+",Gene_refGene) ) %>%
   filter(!grepl("\\bOR\\d+",Gene_refGene)) %>%
   filter(Func_refGene%in%c("exonic","splicing","UTR3","UTR5","intronic")) %>%
+  filter((share_times>1 & type=="SNV") | (share_times>1 & type=="INDEL")) %>% 
   filter(max.pop.freq < 0.01 & SYSUCC_CANCER_FREE_NF < 0.01) %>% 
+  filter(source=="WGS") %>%
   mutate(REF=REF1,ALT=ALT1) %>%
   select(-REF1, -ALT1,-POS) %>%
-  arrange(CHROM,start) %>%
-  filter((share_times>1 & type=="SNV") | (share_times>1 & type=="INDEL")) 
-
-## keep only called by 1 caller, but with high read depth and mutated allele depth (or MAF)
-tmp.t = parse_GATK_AD_field(D.norep_snv_indel_QC$TUMOR.AD)
-tmp.n = parse_GATK_AD_field(D.norep_snv_indel_QC$NORMAL.AD)
-D.norep_snv_indel_QC = D.norep_snv_indel_QC %>% 
-  mutate(TUMOR.DP = tmp.t$DP,
-         TUMOR.AF = tmp.t$AF,
-         TUMOR.AD = tmp.t$AD,
-         NORMAL.DP = tmp.n$DP,
-         NORMAL.AF = tmp.n$AF,
-         NORMAL.AD = tmp.n$AD
-         )
-index.1caller = D.norep.2 %>%
-  filter(share_times == 1) %>% select(index)
-D.1caller_high_coverage = D.norep_snv_indel_QC %>%
-  filter(index %in% index.1caller[,1]) %>%
-  filter(TUMOR.DP >=30 & TUMOR.AF >= 0.1) %>%
-  filter(NORMAL.DP >= 20 & NORMAL.AF < 0.03) %>%
-  filter(Func_refGene%in%c("exonic","splicing","UTR3","UTR5","intronic"))
-
-D.1caller_high_coverage_coding_UTR_intron = D.norep.2 %>% 
-  filter(index %in% D.1caller_high_coverage$index) %>%
-  mutate(REF=REF1,ALT=ALT1) %>%
-  select(-REF1, -ALT1,-POS) %>%
-  arrange(CHROM,start)
-
-D.rescure=rbind(D.norep.noback.coding_UTR_intron,
-                D.1caller_high_coverage_coding_UTR_intron) %>% 
   arrange(CHROM,start)
 
 # melt form of data, with mutation AF
-D.norep.noback.coding_UTR_intron.withAD = D.norep_snv_indel_QC %>%
-  filter(index %in% D.norep.noback.coding_UTR_intron$index)
+D.norep.noback.coding_UTR.wgs.withAD = D.norep_snv_indel %>%
+  filter(index %in% D.norep.noback.coding_UTR.wgs$index)
 
 # save all objects in QC steps
 save(D.all_snv_indel, # raw variants for WGS and WES, SNV and INDEL, before any filtering
-     D.norep.noback.coding_UTR_intron.withAD, # filtered variants + shared by 2 callers
-     D.norep.noback.coding_UTR_intron, # another form of shared variants past QC
+     D.norep_snv_indel, # raw variants + repeatmasker filtering
+     D.norep_snv_indel_wgs_QC, # raw varaints + repeatmasker + blacklist gene + exon_UTR + germline filtering
+     D.norep.noback.coding_UTR.wgs.withAD, # filtered variants + shared by 2 callers
+     D.norep.noback.coding_UTR.wgs, # another form of shared variants past QC
      file="npc_norep_nobacklist_shared2_pop0.01_wgs_objects_20161028.RData"
 )
-
 
 ##### tricks: convert annovar output to MAF. 
 ## require maftools packages, which is not available on cluster
@@ -576,7 +559,7 @@ df = D.norep.noback.coding_UTR_intron.wes_wgs_HKSG.combined %>%
 
 # import mutsigCV results
 mutsig = read.table("wes_exonic_intronic_20161030/wes_exonic_intronic_20161030.sig_genes.txt",
-                    header=TRUE,sep="\t",stringsAsFactors = F)
+                    header=TRUE,sep="\t",stringsAsFactors = )
 mutsig$p[mutsig$p == 0] = 1e-16
 mutsig$q[mutsig$q == 0] = 1e-16
 # -log(P)
@@ -626,7 +609,7 @@ oncoplot(data=test.df,gene.annotation.plot = mutsig_plot,
          is.drop.gene=FALSE,is.sort.gene = FALSE,is.sort.sample=FALSE)
 ### testing over
 
-ggplot(onco, aes(x=sample,y=gene,fill=mutation)) + 
+nnggplot(onco, aes(x=sample,y=gene,fill=mutation)) + 
   geom_tile(width=1,height=1,colour="grey70") + 
   scale_fill_gradientn(colours=rainbow(4),na.value = "white") + 
   geom_text(aes(label=round(mutation,2)),angle=90) +
@@ -636,38 +619,26 @@ ggplot(onco, aes(x=sample,y=gene,fill=mutation)) +
 
 
 ### loading expression data
-load("../../3-RNA-seq/expression_Hanbw/RNAseq_21NPCtumors_10inflam_Deseq_hanbw_cp_20161129.RData")
-id_with_WTS=c("WES01080","WES01108","WES01172","WES01245","WES01293","WES01377","WES01393","WES01414",
-              "WES01467","WES01482","WES01533","WGS01540","WGS01550","WGS01551","WGS01649","WES01652",
-              "WES01655","WGS01675","WES01681","WES01694","WES01716","WES01641","WES01476","WES01111",
-              "WES00952","WES01020")
+load("RNAseq_21NPCtumors_10inflam_Deseq_hanbw_cp_20161030.RData")
+id_with_WTS=c("WES01080","WES01108","WES01172","WES01245","WES01293","WES01377","WES01393","WES01414","WES01467","WES01482","WES01533","WGS01540","WGS01550","WGS01551","WGS01649","WES01652","WES01655","WGS01675","WES01681","WES01694","WES01716")
 names(id_with_WTS)=c("1080", "1108", "1172", "1245", "1293", "1377", "1393", "1414", 
                      "1467", "1482", "1533", "1540", "1550", "1551", "1649", "1652", 
-                     "1655", "1675", "1681", "1694", "1662", "1641", "1476", "1111",
-                     "952" , "1020")
- interested=c("TP53", "CYLD", "TRAF3", "NFKBIA", "NLRC5", "RPL22", "PRH2","TGFBR2","TET2")
+                     "1655", "1675", "1681", "1694", "1662")
 tmp.c = colnames(RNAseq.expr.deseq.tumor)
 tmp.c = gsub("WTS_(\\d+)_UN","\\1",tmp.c)
 colnames(RNAseq.expr.deseq.tumor) = id_with_WTS[tmp.c]
-tmp.expr = as.data.frame(cbind(RNAseq.expr.deseq.tumor[interested,],
+tmp.expr = cbind(RNAseq.expr.deseq.tumor[interested,],
                  RNAseq.expr.deseq.inflatmmation[interested,]
-))
+)
 tmp.expr$gene = rownames(tmp.expr)
 tmp.expr.df = melt(tmp.expr, variable.name = "sample", value.name = "expr")
 # assign group
 tmp.expr.df$group = "control"
 tmp.expr.df$group[tmp.expr.df$sample %in% id_with_WTS] = "tumor"
 tmp.expr.df$group = factor(tmp.expr.df$group,levels=c("tumor","control"))
-pval=as.numeric(sapply(interested,function(x){
-  try(with(tmp.expr.df %>% filter(gene==x),
-           wilcox.test(expr~group))$p.value,silent = T)
-}))
-names(pval)=interested
-tmp.expr.df$pval=sprintf("%.2e",pval[tmp.expr.df$gene])
 ggplot(tmp.expr.df,aes(x=group,y=expr)) + 
   geom_boxplot(aes(fill=group)) + 
-  geom_jitter() +
-  geom_text(x=2,y=20000, aes(label=paste0("P=",pval)) ) +
+  geom_jitter() + 
   facet_wrap(~gene) +
   xlab("") + theme_bw() + theme(strip.text.x=element_text(size=12,face="bold"), 
                      axis.text.x=element_blank())
@@ -680,31 +651,21 @@ tmp.mt = D.norep.noback.coding_UTR.shared.wes.withAF %>%
 tmp.mt = as.data.frame(with(tmp.mt,table(sample,gene)))
 tmp.mt$Freq[tmp.mt$Freq>1]=1
 tmp.mt = tmp.mt %>%filter(Freq>0)
-pval=as.numeric(sapply(interested,function(x){
-  try(with(tmp.expr.df.tumor %>% filter(gene==x),
-           wilcox.test(expr~mutation))$p.value,silent = T)
-  }))
-names(pval)=interested
+
 tmp.expr.df.tumor = tmp.expr.df %>% filter(group=="tumor") %>%
   arrange(sample,gene)
 tmp.expr.df.tumor$mutation = 0
-for(i in 1:nrow(tmp.mt)){
-  tmp.expr.df.tumor$mutation[tmp.expr.df.tumor$sample %in% tmp.mt$sample[i] &
-                             tmp.expr.df.tumor$gene %in% tmp.mt$gene[i]] = 1
-}
+tmp.expr.df.tumor$mutation[tmp.expr.df.tumor$sample %in% tmp.mt$sample &
+                             tmp.expr.df.tumor$gene %in% tmp.mt$gene] = 1
 tmp.expr.df.tumor = within(tmp.expr.df.tumor,{
   mutation = factor(mutation,levels = c(0,1),labels = c("wildtype","mutation"))
 })
-tmp.expr.df.tumor$pval=round(pval[tmp.expr.df.tumor$gene],3)
 ggplot(tmp.expr.df.tumor,aes(x=mutation,y=expr)) + 
   geom_boxplot(aes(fill=mutation)) + 
   geom_jitter() + 
-  geom_text(x=2,y=20000, aes(label=paste0("P=",pval)) ) +
   facet_wrap(~gene) +
   xlab("") + theme_bw() + theme(strip.text.x=element_text(size=12,face="bold"), 
                                 axis.text.x=element_blank())
-
-
 
 # dn/ds plot plus gene expression
 gene_summary = summarize_by_gene_annovar(D.norep.noback.coding_UTR.shared.wes.withAF %>%
@@ -723,6 +684,4 @@ tmp.e = mean.RNAseq.expr.deseq.tumor %>% select(gene,median)
 tmp.d = tmp.d %>% filter(gene %in% tmp.e$gene)
 tmp.e = tmp.e %>% filter(gene %in% tmp.d$gene)
 tmp.c = merge(tmp.d,tmp.e)
-
-
 

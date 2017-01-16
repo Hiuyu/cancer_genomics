@@ -84,7 +84,7 @@ parse_GATK_AD_field<-function(AD){
   }else if(typeof(AD)=="list"){
     AD=as.chracter(AD)
   }
-  AD[is.na(AD)]="0,0" # recode NA to 0,0, means not covered
+  AD[is.na(AD)]="0,0" # recode NA to 0,0, means not covered or no data
   n=length(AD)
   ad=numeric(n)
   dp=numeric(n)
@@ -135,7 +135,7 @@ wrapper_remove_ambigious_find_nearest<-function(gene, func_gene, func_exonic, ge
   ## select most 'powerful' annotation for multi-hit gene
   amb=remove_ambigious(gene,func_gene,func_exonic,sep1)
   ## select nearest gene for intergenic
-  amb1=find_nearest_gene(gene,gene_detail,sep1, sep2)
+  amb1=find_nearest_gene(amb$gene,gene_detail,sep1, sep2)
   amb$gene=amb1$gene
   amb$dist=amb1$dist
   return(amb)
@@ -178,6 +178,19 @@ convert_0base_to_1base<-function(POS,REF,ALT){
   END[len.ref>1]=END[len.ref>1]-1
   return(data.frame(START=START,END=END,NEW.REF=new.REF,NEW.ALT=new.ALT,stringsAsFactors = F))
 }
+
+##### split genes and repeat rows by make each line a variant for a gene for a sample
+## input the whole data.frame, require the Gene_refGene field, and only "," was used for multiple genes.
+## return a data.frame with splitted genes, and add a field to represent whether this variant was in a overlapped gene region
+split_genes<-function(DATA,sep=","){
+  x1=strsplit(DATA$Gene_refGene,sep)
+  n.times=sapply(x1,length)
+  DATA1 = DATA[rep(1:length(n.times),n.times),]
+  DATA1$Gene_refGene = unlist(x1)
+  return(DATA1)
+}
+
+
 
 
 #####  get the context and mutation type from reference genome ######
@@ -231,8 +244,37 @@ decide_1base_mutation_type<-function(REF,ALT){
   return(mutation_type)
 }
 
-
-
+## parse AAchange column from ANNOVAR format data, to get the AA
+retrive_AA_change_annovar<-function(AA_change, isoform_name,sep=","){
+  .FUN<-function(Q){
+    if(Q==".") return(".")
+    Q_list=unlist(strsplit(Q,sep))
+    Q_list_2=lapply(Q_list,strsplit,":")
+    Q_matrix=do.call(rbind,do.call(c,Q_list_2))
+    idx=Q_matrix[,2]==isoform_name
+    if(sum(idx)==1){
+      Q_matrix[idx,5]
+    }else if(sum(idx)==0){
+      NA
+    }else{
+      z=unique(Q_matrix[idx,5])
+      if(length(z)==1){
+        z
+      }else{
+        paste0(z,collapse="||")
+      }
+    }
+  }
+  AA_change_list=lapply(AA_change,.FUN)
+  output=lapply(AA_change_list,function(x){
+    if(is.na(x)) return(rep(".",4))
+    pos=gsub("p\\.([^\\d]*)(\\d+)([^\\d]*)","\\2",x,perl=TRUE)
+    from=gsub("p\\.([^\\d]*)(\\d+)([^\\d]*)","\\1",x,perl=TRUE)
+    to=gsub("p\\.([^\\d]*)(\\d+)([^\\d]*)","\\3",x,perl=TRUE)
+    c(pos,from,to, x)
+  })
+  do.call(rbind,output)
+}
 
 
 
