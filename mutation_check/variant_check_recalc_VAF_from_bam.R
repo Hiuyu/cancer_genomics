@@ -413,10 +413,17 @@ for(i in 1:nrow(mutations)){
   }
 }
 cat("\n")
+
 # to output the remaining lines.
 if(ib < nrow(mutations)) {
+  tmp.app = TRUE
+  tmp.coln = FALSE
+  if(ib == 1) {
+    tmp.app = FALSE
+    tmp.coln = TRUE
+  }
   write.table(mutations[ib:nrow(mutations),],file=output_file,
-              sep="\t",row.names=F,col.names = F, quote=F,append = TRUE
+              sep="\t",row.names=F,col.names = tmp.coln, quote=F,append = tmp.app
               )
 }
 
