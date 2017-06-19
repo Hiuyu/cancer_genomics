@@ -190,6 +190,7 @@ split_genes<-function(DATA,sep=","){
   return(DATA1)
 }
 
+split_lines<-function(DATA,sep1=",",sep2=";"){}
 
 
 

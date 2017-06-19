@@ -34,9 +34,11 @@
 # Author: Xiao-yu Zuo
 # date: Thu Jun 15 10:03:25 2017
 #######################################################################
-library(Rsamtools)
-library(GenomicAlignments)
-library(stringr)
+# Mon Jun 19 15:52:26 2017 ------------------------------
+# suppress warnings
+suppressWarnings(library(Rsamtools))
+suppressWarnings(library(GenomicAlignments))
+suppressWarnings(library(stringr))
 
 # parse argument
 args=commandArgs(TRUE)
@@ -47,6 +49,13 @@ bam_surfix = ".bam" # manual modify
 
 mutations = read.table(mutation_file, header=FALSE,sep="\t",stringsAsFactors = FALSE, comment.char = "#")
 colnames(mutations) = c("sample","chr","pos","ref","alt","gene")[1:ncol(mutations)]
+
+# Mon Jun 19 15:41:22 2017 ------------------------------
+# in case of letting any column to be "logical"
+col.logic = colnames(mutations)[sapply(mutations,class)=="logical"]
+for(s in col.logic) mutations[,s] = str_sub(as.character(mutations[,s]),1,1)
+rm(col.logic)
+
 
 ##############################
 # Functions
