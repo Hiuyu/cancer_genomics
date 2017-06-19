@@ -35,10 +35,10 @@
 # date: Thu Jun 15 10:03:25 2017
 #######################################################################
 # Mon Jun 19 15:52:26 2017 ------------------------------
-# suppress warnings
-suppressWarnings(library(Rsamtools))
-suppressWarnings(library(GenomicAlignments))
-suppressWarnings(library(stringr))
+# suppress message
+suppressMessages(library(Rsamtools))
+suppressMessages(library(GenomicAlignments))
+suppressMessages(library(stringr))
 
 # parse argument
 args=commandArgs(TRUE)
