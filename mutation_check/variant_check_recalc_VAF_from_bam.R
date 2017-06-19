@@ -264,7 +264,8 @@ isMutatedRead <- function(start, mpos, ref, alt, MD, cigar ){
 # Thu Jun 15 14:01:12 2017 ------------------------------
 # check and QC vriants from BAM file and recalulate the AD, RD and VAF
 #######################################################################
-scan_mutation_from_bam <- function(which, ref, alt, bamName, what, flag, tag){
+scan_mutation_from_bam <- function(which, ref, alt, bamName, what, flag, tag, bq.cutoff = 20){
+  # bq.cutoff: sequencing quality of nucleotide in FASTQ. bq < bq.cutoff would be removed
   AD = 0
   RD = 0
   VAF = 0
@@ -342,7 +343,7 @@ scan_mutation_from_bam <- function(which, ref, alt, bamName, what, flag, tag){
         }
         tmp.q = str_sub(bam.pass$qual[i], mpos[i] + to.shift, mpos[i] + to.shift + length(alt) - 1)
         tmp.q = convertPhredCharacter(tmp.q, phred = 33) # convert to number
-        if(any(tmp.q < 20)) { # assume Q20
+        if(any(tmp.q < bq.cutoff)) { # assume Q20
           is.mutread[i] = FALSE
         }
       }
@@ -378,6 +379,7 @@ flag = scanBamFlag(isPaired = T, isProperPair = T, isUnmappedQuery = F, hasUnmap
 what = c("qname","flag", "mapq", "isize", "seq", "qual")
 tag = c("MQ", "MC", "SA", "MD", "NM","XA")
 
+cat("scan start !")
 
 for(i in 1:nrow(mutations)){
   sample = mutations[i,1]
@@ -390,11 +392,11 @@ for(i in 1:nrow(mutations)){
   which = GRanges(chr,IRanges(start, end))
   # for tumor checking
   bamName = str_c(path_to_bam, "/", sample, "_T", bam_surfix)
-  tmp = scan_mutation_from_bam(which, refbase, altbase, bamName, what, flag, tag)
+  tmp = scan_mutation_from_bam(which, refbase, altbase, bamName, what, flag, tag, bq.cutoff = 10)
   mutations[i, c("tumor.total.reads", "tumor.pass.reads", "tumor.AD", "tumor.RD", "tumor.VAF")] = tmp
   # for normal checking
   bamName = str_c(path_to_bam, "/", sample, "_B", bam_surfix)
-  tmp = scan_mutation_from_bam(which, refbase, altbase, bamName, what, flag, tag)
+  tmp = scan_mutation_from_bam(which, refbase, altbase, bamName, what, flag, tag, bq.cutoff = 10)
   mutations[i, c("normal.total.reads", "normal.pass.reads", "normal.AD", "normal.RD", "normal.VAF")] = tmp
   # log
   if(i %% chunksize == 0){
