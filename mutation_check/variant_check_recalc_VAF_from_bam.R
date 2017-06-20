@@ -525,7 +525,8 @@ blast_check_result = blast_check(mutations[,c("chr","pos")],blast_dir,blast_db,b
 
 # combine 
 mutations$index = with(mutations, str_c(chr, ":", pos))
-mutations = merge(mutations, blast_check_result[,c("index", "map.uniq", "suppl.align")])
+rownames(blast_check_result) = blast_check_result$index
+mutations[index, c("map.uniq", "suppl.align")] = blast_check_result[mutations$index, c("map.uniq", "suppl.align")]
 mutations[,"index"] = NULL # remove index
 
 cat("Checking mapping uniqueness done!\nNow writing output... \n")
