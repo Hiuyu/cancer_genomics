@@ -3,7 +3,7 @@
 #           reads for alterate and reference alleles and VAF (variant allele frequency).
 #        Assume the tumor and normal bam have a same naming style such as ${sample_id}_{T,B}.bam.
 #
-# Dependencies: Rsamtools, GenomicAlignments, stringr
+# Dependencies: Rsamtools, GenomicAlignments, stringr, Biostrings
 #
 # Input:  Argument 1: a mutation_file that should have the following columns with no header name.
 #         But "#" line is allowed.
@@ -484,7 +484,7 @@ flag = scanBamFlag(isPaired = T, isProperPair = T, isUnmappedQuery = F, hasUnmap
 what = c("qname","flag", "mapq", "isize", "seq", "qual")
 tag = c("MQ", "MC", "SA", "MD", "NM","XA")
 
-cat("Scanning BAM files start !")
+cat("Scanning BAM files start !\n")
 
 for(i in 1:nrow(mutations)){
   sample = mutations[i,1]
@@ -506,7 +506,11 @@ for(i in 1:nrow(mutations)){
  
   # logging
   if(i %% chunksize == 0){
+    if(ib %% 10 == 0) {
+      cat("\n") # each 10 "+" in a row
+    }
     cat("+ ")
+    ib = ib + 1
   }
   
 }
@@ -522,6 +526,7 @@ blast_check_result = blast_check(mutations[,c("chr","pos")],blast_dir,blast_db,b
 # combine 
 mutations$index = with(mutations, str_c(chr, ":", pos))
 mutations = merge(mutations, blast_check_result[,c("index", "map.uniq", "suppl.align")])
+mutations[,"index"] = NULL # remove index
 
 cat("Checking mapping uniqueness done!\nNow writing output... \n")
 
