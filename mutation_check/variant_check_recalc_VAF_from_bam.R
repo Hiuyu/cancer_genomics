@@ -28,11 +28,19 @@
 #           8: normal.AD, reads supporting alterate alleles in normal
 #           9: normal.RD, reads supporting reference alleles in normal
 #           10: normal.VAF, variant allele frequency in normal, VAF=AD/(AD+RD)
+#           11: map.uniq, is the sequence around variant uniquely mapped to genome, thus less possibility of multiple
+#               alignment or mapping error. TRUE or FALSE. ( Tue Jun 20 09:59:15 2017)
+#           12: suppl.align, if map.uniq == FALSE, we could know how many regions are similar as the query one, 
+#               and the details. ( Tue Jun 20 12:33:15 2017)
 #
 # Usage:  Rscript variant_check_recalc_VAF_from_BAM.R mutation_file output_file
 #
 # Author: Xiao-yu Zuo
 # date: Thu Jun 15 10:03:25 2017
+# 
+# History:
+# Tue Jun 20 09:59:15 2017 ------------------------------
+#   Blast for sequences around variants.
 #######################################################################
 # Mon Jun 19 15:52:26 2017 ------------------------------
 # suppress message
@@ -46,6 +54,13 @@ mutation_file = as.character(args[1])
 output_file = as.character(args[2])
 path_to_bam = "/data/home/zuoxy/data/NPC/somatic/20160519_863closing/0-bam_GD/" # manual modify 
 bam_surfix = ".bam" # manual modify
+
+# set blast parameters and reference genome
+ref_fasta = "/data/public/HomoSapiens/hg19/ucsc_hg19.fasta"
+blast_dir = "/share/apps/blast/2.3.0/bin/" # path to blastn
+blast_flank_bp = 150 # used to extract reference sequence of variants +- blast_flank_bp bps
+blast_db = "/data/public/HomoSapiens/blastDB/hg19/ucsc_hg19" # blastdb path
+nt = 2 # threads used in blastn
 
 mutations = read.table(mutation_file, header=FALSE,sep="\t",stringsAsFactors = FALSE, comment.char = "#")
 colnames(mutations) = c("sample","chr","pos","ref","alt","gene")[1:ncol(mutations)]
@@ -358,6 +373,96 @@ scan_mutation_from_bam <- function(which, ref, alt, bamName, what, flag, tag, bq
 }
 
 
+
+#######################################################################
+# Tue Jun 20 10:27:28 2017 ------------------------------
+# BLAST to check mapping uniqueness of sequence.
+#######################################################################
+blast_check <- function(location, blast_dir, blast_db, blast_flank_bp, threads){
+  # location: a data.frame to store position of variants, with colnames. 
+  #           column 1: chr, column 2: pos
+  # balst_dir: path to blastn
+  # blast_db: makeblastdb prepared blast databases.
+  # blast_flank_bp: how many basepairs around the variant should be extracted
+  # threads: threads used to do blast
+  # output: a nonduplicated data.frame with columns
+  #         1. chr
+  #         2. pos
+  #         3. uniquely mapped or not(TRUE or FALSE)?
+  suppressMessages(library(Biostrings))
+  tmpfile = tempfile(pattern = "file", tmpdir = tempdir(), fileext = "") # use temp file
+  
+  location = unique(location) # make query uniqueness.
+  # set ranges to extract sequences
+  location$start = location$pos - blast_flank_bp
+  location$end = location$pos + blast_flank_bp
+  location$index = with(location, str_c(chr,":",pos))
+  location$pos = NULL # remove pos column
+  # build GRanges object
+  gr = makeGRangesFromDataFrame(location, ignore.strand=TRUE, keep.extra.columns=TRUE)
+  
+  ## get fasta and write to file
+  fa = FaFile(ref_fasta) # load indexed fasta
+  seq = getSeq(fa, gr)
+  names(seq) = gr$index # rename seqs
+  # write tmp fasta file
+  writeXStringSet(seq, tmpfile, format = "fasta")
+  
+  ## do blast
+  cat("Doing blastn, please wait for a long? time....\n")
+  include_flags = "qseqid qlen sacc slen qstart qend sstart send bitscore score pident nident mismatch gaps evalue qcovs"
+  # set command line string
+  cmd = sprintf("%s/blastn -query %s -db %s -outfmt '6 %s' -num_threads %i -max_target_seqs 5 -qcov_hsp_perc 50",
+                blast_dir, tmpfile, blast_db, include_flags, nt)
+  blast_result <- read.table(pipe(cmd)) # pipe
+  # add column name
+  colnames( blast_result ) <- as.vector(str_split(include_flags," ",simplify = T))
+  cat("Blastn done! Now filtering...\n")
+  
+  ## check multiple alignments
+  output = location
+  output$map.uniq = FALSE
+  output$suppl.align = "" # supplemental alignment
+  # foreach location
+  for(i in 1:nrow(output)){
+    idx = output[i,"index"]
+    sub.out = blast_result[blast_result$qseqid == idx, ] # get blast results subset
+    nm = nrow(sub.out) # how many match records?
+    if(nm == 0){ # nothing found
+      stop(str_c(idx," have nothing match!!!!"))
+    } else if (nm == 1){ # uniquely mapped
+      if(sub.out$qend - sub.out$qstart == 2*blast_flank_bp) {
+        output[i,"map.uniq"] = TRUE
+      } else {
+        print(sub.out)
+        stop(str_c(idx," have unknown problem !!!"))
+      }
+    } else if (nm > 1) { # multiple alignment found
+      # remove itself match
+      sub.out = subset(sub.out, !(sstart == output[i,"start"] & send == output[i,"end"] & sacc == output[i,"chr"]))
+      output[i, c("map.uniq","suppl.align")] = with(sub.out, {
+        is.sa = ((qstart <= blast_flank_bp / 2 & qend >= blast_flank_bp * 1.5)  & # read length
+            pident > 90) # similarity
+        sa = ""
+        if(any(is.sa)){
+          sa = with(sub.out[is.sa,], str_c(
+            sprintf("%s:%i-%i(%.1f)", sacc, sstart, send, pident), 
+            collapse = ";"
+          ))
+        }
+        c(!any(is.sa), sa)
+      })
+    }
+  }
+  rm(tmpfile)
+  ## return 
+  cat("Filtering done, return...\n")
+  print(head(output))
+  return(output)
+}
+
+
+
 #####################################################
 mutations$tumor.total.reads = 0
 mutations$tumor.pass.reads = 0
@@ -379,7 +484,7 @@ flag = scanBamFlag(isPaired = T, isProperPair = T, isUnmappedQuery = F, hasUnmap
 what = c("qname","flag", "mapq", "isize", "seq", "qual")
 tag = c("MQ", "MC", "SA", "MD", "NM","XA")
 
-cat("scan start !")
+cat("Scanning BAM files start !")
 
 for(i in 1:nrow(mutations)){
   sample = mutations[i,1]
@@ -398,38 +503,36 @@ for(i in 1:nrow(mutations)){
   bamName = str_c(path_to_bam, "/", sample, "_B", bam_surfix)
   tmp = scan_mutation_from_bam(which, refbase, altbase, bamName, what, flag, tag, bq.cutoff = 10)
   mutations[i, c("normal.total.reads", "normal.pass.reads", "normal.AD", "normal.RD", "normal.VAF")] = tmp
-  # log
+ 
+  # logging
   if(i %% chunksize == 0){
     cat("+ ")
-    tmp.app = TRUE
-    tmp.coln = FALSE
-    if(ib == 1) {
-      tmp.app = FALSE
-      tmp.coln = TRUE
-    }
-    write.table(mutations[ib:(ib+chunksize-1),], file=output_file, 
-                sep="\t", row.names=F, col.names = tmp.coln, 
-                quote = FALSE, append = tmp.app
-                )
-    ib = ib + chunksize
   }
-}
-cat("\n")
-
-# to output the remaining lines.
-if(ib < nrow(mutations)) {
-  tmp.app = TRUE
-  tmp.coln = FALSE
-  if(ib == 1) {
-    tmp.app = FALSE
-    tmp.coln = TRUE
-  }
-  write.table(mutations[ib:nrow(mutations),],file=output_file,
-              sep="\t",row.names=F,col.names = tmp.coln, quote=F,append = tmp.app
-              )
+  
 }
 
-cat("all done \n")
+cat("Scanning BAM files done!\nNow checking mapping uniqueness....\n")
+
+## Tue Jun 20 01:56:11 2017 ------------------------------
+## check uniqueness of sequence of +- flk bps around mutations,
+## use BLAT here is also OK, but BLAST is used here.
+#  Note that the returned data.frame is non-duplicated.
+blast_check_result = blast_check(mutations[,c("chr","pos")],blast_dir,blast_db,blast_flank_bp,nt)
+
+# combine 
+mutations$index = with(mutations, str_c(chr, ":", pos))
+mutations = merge(mutations, blast_check_result[,c("index", "map.uniq", "suppl.align")])
+
+cat("Checking mapping uniqueness done!\nNow writing output... \n")
+
+write.table(mutations,
+            file = output_file,
+            sep = "\t",
+            row.names = FALSE, 
+            col.names = TRUE, 
+            quote = FALSE)
+
+cat("all done! \n")
 
 
 
