@@ -318,9 +318,9 @@ scan_mutation_from_bam <- function(which, ref, alt, bamName, what, flag, tag, bq
       (!isHyperMutatedRead(bam$MD[i], bam$cigar[i], q = 4)) & 
       bam$width[i] > 60
     if(!is.na(bam$MC[i])) {
-      base_flag = flag & (!isClipped(bam$MC[i], tol=8))
+      flag = flag & (!isClipped(bam$MC[i], tol=8))
     }
-    base_flag
+    flag
   })
   
   bam.pass = bam[qc_flag & !is.na(qc_flag),]
@@ -526,7 +526,7 @@ blast_check_result = blast_check(mutations[,c("chr","pos")],blast_dir,blast_db,b
 # combine 
 mutations$index = with(mutations, str_c(chr, ":", pos))
 rownames(blast_check_result) = blast_check_result$index
-mutations[index, c("map.uniq", "suppl.align")] = blast_check_result[mutations$index, c("map.uniq", "suppl.align")]
+mutations[, c("map.uniq", "suppl.align")] = blast_check_result[mutations$index, c("map.uniq", "suppl.align")]
 mutations[,"index"] = NULL # remove index
 
 cat("Checking mapping uniqueness done!\nNow writing output... \n")
