@@ -428,8 +428,11 @@ blast_check <- function(location, blast_dir, blast_db, blast_flank_bp, threads){
     idx = output[i,"index"]
     sub.out = blast_result[blast_result$qseqid == idx, ] # get blast results subset
     nm = nrow(sub.out) # how many match records?
-    if(nm == 0){ # nothing found
-      stop(str_c(idx," have nothing match!!!!"))
+    if(nm == 0){ # nothing found, still set it as FALSE
+      # Wed Jun 21 15:02:56 2017 ------------------------------
+      # it may due to low sequence complexity.
+      warning(str_c(idx," have nothing match!!!! Maybe due to low complexity"))
+      output[i,"map.uniq"] = FALSE
     } else if (nm == 1){ # uniquely mapped
       if(sub.out$qend - sub.out$qstart == 2*blast_flank_bp) {
         output[i,"map.uniq"] = TRUE
